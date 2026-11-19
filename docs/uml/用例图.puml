@@ -1,0 +1,54 @@
+@startuml 智能日报生成器_用例图
+' 智能日报生成器 v2 用例图（PlantUML）
+' 渲染：java -jar plantuml.jar docs/uml/用例图.puml -tpng
+left to right direction
+skinparam packageStyle rectangle
+skinparam actorStyle awesome
+
+actor "团队成员\n(员工)" as Member
+actor "主编\n(组长)" as Lead
+actor "系统调度\n(定时任务)" as Scheduler
+
+actor "GitHub API" as GH <<外部系统>>
+actor "飞书开放平台" as FS <<外部系统>>
+actor "SMTP 邮箱服务" as SMTP <<外部系统>>
+
+rectangle "智能日报生成器" {
+  usecase "UC-01 采集 GitHub 提交记录" as UC01
+  usecase "UC-02 采集飞书任务流转" as UC02
+  usecase "UC-03 采集飞书群消息" as UC03
+  usecase "UC-04 生成个人日报" as UC04
+  usecase "UC-05 生成团队日报" as UC05
+  usecase "UC-06 邮件推送日报" as UC06
+  usecase "UC-07 飞书机器人推送日报" as UC07
+  usecase "UC-08 存储与查询日报历史" as UC08
+  usecase "UC-09 维护成员与采集映射配置" as UC09
+  usecase "UC-10 定时触发每日日报生成" as UC10
+}
+
+' 参与者与用例
+Member --> UC04
+Member --> UC09
+Lead --> UC05
+Lead --> UC08
+Scheduler --> UC10
+
+' 外部系统参与
+UC01 --> GH
+UC02 --> FS
+UC03 --> FS
+UC06 --> SMTP
+UC07 --> FS
+
+' 用例关系
+UC10 .> UC01 : <<include>>
+UC10 .> UC02 : <<include>>
+UC10 .> UC03 : <<include>>
+UC10 .> UC04 : <<include>>
+UC10 .> UC05 : <<include>>
+UC10 .> UC06 : <<include>>
+UC10 .> UC07 : <<include>>
+UC04 .> UC08 : <<include>>
+UC05 .> UC08 : <<include>>
+UC05 .> UC04 : <<extend>>\n(按成员汇总)
+@enduml
