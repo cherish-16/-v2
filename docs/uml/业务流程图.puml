@@ -1,0 +1,33 @@
+@startuml 智能日报生成器_业务流程图
+' 智能日报生成器 v2 业务流程泳道图（PlantUML）
+' 渲染：java -jar plantuml.jar docs/uml/业务流程图.puml -tpng
+|系统调度|
+start
+:每工作日 18:00 触发\nrun_daily(team_id, date);
+|采集层|
+:读取成员与仓库映射配置;
+:采集 GitHub 提交记录\n(UTC 区间);
+:采集飞书任务流转;
+:采集飞书群消息;
+:写入原始记录 (SQLite);
+|生成层|
+:按成员归组原始记录;
+if (该成员当日有数据?) then (有)
+  :生成个人日报条目;
+else (无)
+  :生成"无数据"标注条目;
+endif
+:汇总为团队日报;
+|推送层|
+:渲染邮件 HTML;
+:发送邮件 (SMTP);
+:推送飞书机器人消息;
+|编排入口|
+:记录 RunSummary\n(采集/生成/发送/失败);
+if (存在失败项?) then (是)
+  :记录失败原因\n(不中断已成功项);
+else (否)
+endif
+:日报历史入库;
+stop
+@enduml
