@@ -221,3 +221,48 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ============================================================
+# 项目补充（智能日报 v2）
+# ============================================================
+
+# ---- 操作系统 ----
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# ---- 编辑器 / IDE ----
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ---- 日志与临时文件 ----
+logs/
+tmp/
+temp/
+*.tmp
+
+# ---- 环境变量与密钥 ----
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# ---- Node.js ----
+node_modules/
+dist/
+build/
+.next/
+.nuxt/
+coverage/
+pnpm-lock.yaml.bak
+
+# ---- 构建产物 / 打包 ----
+*.zip
+*.tar.gz
+out/
+
+# ---- 课程设计指导书（不纳入版本管理） ----
+*指导书*.pdf
