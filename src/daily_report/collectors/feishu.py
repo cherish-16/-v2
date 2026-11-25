@@ -7,12 +7,17 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 import httpx
 
 from daily_report.errors import AuthenticationError
-from daily_report.models import MessageRecord, TaskRecord, ensure_utc
+from daily_report.models import (
+    AttendanceRecord,
+    MessageRecord,
+    TaskRecord,
+    ensure_utc,
+)
 from daily_report.net import get_json, post_json
 
 API_BASE = "https://open.feishu.cn/open-apis"
@@ -155,4 +160,57 @@ class FeishuMessageSource(_FeishuBase):
             created_at=_epoch_ms_to_utc(item["create_time"]),
             chat_id=item.get("chat_id", ""),
             is_recalled=bool(item.get("deleted", False)),
+        )
+
+class FeishuAttendanceSource(_FeishuBase):
+    """考勤采集（v1.1 变更，见 design.md §3.6 / ADR-005）。"""
+
+    def collect_attendance(
+        self, since: datetime, until: datetime
+    ) -> list[AttendanceRecord]:
+        start = ensure_utc(since)
+        end = ensure_utc(until)
+        if start >= end:
+            return []
+
+        records: list[AttendanceRecord] = []
+        page_token: str | None = None
+        for _ in range(MAX_PAGES):
+            params: dict[str, str] = {
+                "check_date_from": start.date().isoformat(),
+                "check_date_to": end.date().isoformat(),
+                "page_size": "50",
+            }
+            if page_token:
+                params["page_token"] = page_token
+            data = get_json(
+                self._client,
+                f"{API_BASE}/attendance/v1/user_tasks/query",
+                params=params,
+                headers=self._auth_headers(),
+            )
+            payload = data.get("data", {})
+            records.extend(
+                self._to_record(item) for item in payload.get("user_task_results", [])
+            )
+            if not payload.get("has_more"):
+                break
+            page_token = payload.get("page_token")
+        return records
+
+    @staticmethod
+    def _to_record(item: dict) -> AttendanceRecord:
+        check_in = item.get("check_in_record") or {}
+        check_out = item.get("check_out_record") or {}
+        return AttendanceRecord(
+            record_id=item["result_id"],
+            member_open_id=item.get("user_id"),
+            work_date=date.fromisoformat(item["day"]),
+            status=item.get("status", "present"),
+            checked_in_at=(
+                _epoch_ms_to_utc(check_in["time"]) if check_in.get("time") else None
+            ),
+            checked_out_at=(
+                _epoch_ms_to_utc(check_out["time"]) if check_out.get("time") else None
+            ),
         )

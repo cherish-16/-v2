@@ -73,6 +73,38 @@ class MessageRecord:
         object.__setattr__(self, "created_at", ensure_utc(self.created_at))
 
 
+ATTENDANCE_STATUSES = frozenset({"present", "absent", "late", "leave"})
+
+
+@dataclass(frozen=True)
+class AttendanceRecord:
+    """考勤原始记录（v1.1 变更新增）。
+
+    ``checked_in_at`` / ``checked_out_at`` 为 None 表示没有对应打点 ——
+    缺勤日天然如此，不是数据缺失。
+    """
+
+    record_id: str
+    member_open_id: str | None
+    work_date: date
+    status: str
+    checked_in_at: datetime | None
+    checked_out_at: datetime | None
+
+    def __post_init__(self) -> None:
+        if not self.record_id:
+            raise ValueError("AttendanceRecord.record_id must be non-empty for traceability")
+        if self.status not in ATTENDANCE_STATUSES:
+            raise ValueError(
+                f"AttendanceRecord.status must be one of {sorted(ATTENDANCE_STATUSES)}, "
+                f"got {self.status!r}"
+            )
+        if self.checked_in_at is not None:
+            object.__setattr__(self, "checked_in_at", ensure_utc(self.checked_in_at))
+        if self.checked_out_at is not None:
+            object.__setattr__(self, "checked_out_at", ensure_utc(self.checked_out_at))
+
+
 @dataclass(frozen=True)
 class ReportItem:
     source_type: str
