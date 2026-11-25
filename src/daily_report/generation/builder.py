@@ -12,7 +12,7 @@ from collections.abc import Sequence
 from datetime import UTC, date, datetime
 
 from daily_report.errors import TraceabilityError
-from daily_report.generation.attribution import MemberData, attribute
+from daily_report.generation.attribution import AttributionResult, MemberData, attribute
 from daily_report.models import (
     CommitRecord,
     DailyReport,
@@ -116,6 +116,61 @@ def generate_report(
         )
 
     if scope is ReportScope.TEAM:
-        raise NotImplementedError("team report is implemented in the next task")
+        return _build_team(
+            entity_id=entity_id,
+            report_date=report_date,
+            members=members,
+            result=result,
+            missing_sources=missing_sources,
+            generated_at=generated_at,
+        )
 
     raise ValueError(f"unsupported scope: {scope!r}")
+
+
+def _build_team(
+    *,
+    entity_id: str,
+    report_date: date,
+    members: Sequence[Member],
+    result: AttributionResult,
+    missing_sources: Sequence[str],
+    generated_at: datetime,
+) -> DailyReport:
+    """把全组成员条目汇总成团队日报。
+
+    按 ``members`` 的声明顺序遍历，保证输出稳定；条目文本加成员名前缀，
+    渲染层据此分组。无数据成员与未配置映射成员都显式写进备注 ——
+    一个人从日报里静默消失，比写错更糟。
+    """
+    items: list[ReportItem] = []
+    no_data_names: list[str] = []
+
+    for member in members:
+        data = result.by_member.get(member.member_id, MemberData())
+        member_items = _to_items(data)
+        if not member_items:
+            no_data_names.append(member.name)
+        for item in member_items:
+            items.append(
+                ReportItem(
+                    source_type=item.source_type,
+                    source_id=item.source_id,
+                    text=f"{member.name}：{item.text}",
+                    occurred_at=item.occurred_at,
+                )
+            )
+
+    return DailyReport(
+        scope=ReportScope.TEAM,
+        entity_id=entity_id,
+        report_date=report_date,
+        items=items,
+        generated_at=generated_at,
+        note=_compose_note(
+            has_items=bool(items),
+            missing_sources=missing_sources,
+            unmapped_names=[m.name for m in result.unmapped],
+            no_data_names=no_data_names,
+        ),
+    )
