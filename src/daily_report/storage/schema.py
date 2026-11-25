@@ -64,11 +64,14 @@ CREATE TABLE IF NOT EXISTS run_summaries (
     finished_at    TEXT
 );
 
--- 幂等约束：同一团队同一天只允许一条「成功」记录。
--- 用部分索引而非表级 UNIQUE，失败与跳过的运行可以有多条。
-CREATE UNIQUE INDEX IF NOT EXISTS idx_run_success_unique
+-- 幂等约束：同一团队同一天只允许一条「有产出」的记录。
+-- success 与 partial 都算有产出（partial 已经发过邮件），必须唯一，
+-- 否则重触发会二次发信。failed 不在此列 —— 全渠道失败后允许当日重试。
+CREATE UNIQUE INDEX IF NOT EXISTS idx_run_productive_unique
     ON run_summaries (team_id, run_date)
-    WHERE status = 'success';
+    WHERE status IN ('success', 'partial');
+
+DROP INDEX IF EXISTS idx_run_success_unique;
 """
 
 

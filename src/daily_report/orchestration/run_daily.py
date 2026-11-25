@@ -16,6 +16,7 @@ from daily_report.config import Settings
 from daily_report.generation.builder import generate_report
 from daily_report.models import ReportScope, RunSummary
 from daily_report.publishers.base import BotPublisher, EmailPublisher
+from daily_report.publishers.email import mask_email
 from daily_report.storage.repository import Repository
 
 logger = logging.getLogger(__name__)
@@ -53,8 +54,8 @@ def run_daily(
     if started_at.tzinfo is None:
         raise ValueError("now must be timezone-aware")
 
-    existing = repo.find_successful_run(team_id, report_date)
-    if existing is not None:
+    existing = repo.find_latest_run(team_id, report_date)
+    if existing is not None and existing.status in ("success", "partial"):
         logger.info("duplicate run for %s on %s ignored", team_id, report_date)
         return RunSummary(
             team_id=team_id,
@@ -75,8 +76,18 @@ def run_daily(
     # ---- 采集：单源失败不影响其余 ----
     commits = []
     try:
+        owner = settings.github_owner or "demo-org"
+        repo_name = settings.github_repo or "demo-repo"
+        if settings.source_mode == "live" and (
+            not settings.github_owner or not settings.github_repo
+        ):
+            raise ValueError("GITHUB_OWNER and GITHUB_REPO must be configured in live mode")
         commits = sources.commit_source.collect_commits(
-            "demo-org", "demo-repo", since, until, max_pages=settings.max_pages
+            owner,
+            repo_name,
+            since,
+            until,
+            max_pages=settings.max_pages,
         )
         repo.save_commits(commits)
         collected["github"] = len(commits)
@@ -114,9 +125,13 @@ def run_daily(
 
     # ---- 生成：每个成员一份 + 团队一份 ----
     members = repo.list_members()
+    if not members:
+        # 没有成员就没有日报可生成；判 success 会把当天永久锁死。
+        failed["members"] = "no members configured; nothing to generate"
     personal_reports = []
     for member in members:
-        report = generate_report(
+        try:
+            report = generate_report(
             ReportScope.PERSONAL,
             member.member_id,
             report_date,
@@ -126,12 +141,18 @@ def run_daily(
             messages=messages,
             attendance=attendance,
             missing_sources=missing_sources,
-            now=started_at,
-        )
+                now=started_at,
+                tz=settings.timezone,
+            )
+        except Exception as exc:  # noqa: BLE001 - 单人失败不得拖垮整批
+            failed[f"personal:{member.member_id}"] = type(exc).__name__
+            continue
         repo.save_report(report)
         personal_reports.append(report)
 
-    team_report = generate_report(
+    team_report = None
+    try:
+        team_report = generate_report(
         ReportScope.TEAM,
         team_id,
         report_date,
@@ -142,31 +163,60 @@ def run_daily(
         attendance=attendance,
         missing_sources=missing_sources,
         now=started_at,
-    )
-    repo.save_report(team_report)
+            tz=settings.timezone,
+        )
+    except Exception as exc:  # noqa: BLE001
+        failed["team_report"] = type(exc).__name__
+    else:
+        repo.save_report(team_report)
 
-    # ---- 推送 ----
+    # ---- 推送：两个渠道各自隔离（I1）----
     sent: dict[str, int] = {}
+    email_ok = bot_ok = False
+    had_channels = False
+
     recipients = [m.email for m in members if m.email]
     if recipients:
-        result = publishers.email.send_email(team_report, recipients)
-        sent["email"] = len(result.success)
-        for address, reason in result.failed:
-            failed[f"email:{address}"] = reason
+        had_channels = True
+        try:
+            result = publishers.email.send_email(team_report, recipients)
+            sent["email"] = len(result.success)
+            email_ok = bool(result.success)
+            for address, reason in result.failed:
+                failed[f"email:{mask_email(address)}"] = reason
+        except Exception as exc:  # noqa: BLE001 - 单渠道失败不得中断
+            failed["email"] = type(exc).__name__
     else:
         sent["email"] = 0
 
-    if publishers.bot is not None:
-        push = publishers.bot.push_to_feishu(team_report)
-        sent["feishu_bot"] = 1 if push.ok else 0
-        if not push.ok:
-            failed["feishu_bot"] = push.error or "unknown"
+    if publishers.bot is not None and team_report is not None:
+        had_channels = True
+        try:
+            push = publishers.bot.push_to_feishu(team_report)
+            sent["feishu_bot"] = 1 if push.ok else 0
+            bot_ok = push.ok
+            if not push.ok:
+                failed["feishu_bot"] = push.error or "unknown"
+        except Exception as exc:  # noqa: BLE001
+            sent["feishu_bot"] = 0
+            failed["feishu_bot"] = type(exc).__name__
 
     finished_at = datetime.now(UTC) if now is None else started_at
+    # 没有任何成员 = 本次运行没有产出，判 failed 以便配置修正后可重试。
+    # 有渠道但全挂 → failed；部分失败 → partial；全好 → success。
+    if not members:
+        status = "failed"
+    elif failed and had_channels and not (email_ok or bot_ok):
+        status = "failed"
+    elif failed:
+        status = "partial"
+    else:
+        status = "success"
+
     summary = RunSummary(
         team_id=team_id,
         run_date=report_date,
-        status="partial" if failed else "success",
+        status=status,
         collected=collected,
         sent=sent,
         failed=failed,

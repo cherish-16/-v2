@@ -36,6 +36,9 @@ class MemberData:
 class AttributionResult:
     by_member: dict[str, MemberData]
     unmapped: list[Member]
+    #: member_id → 缺少的映射字段名，例如 ``{"m2": ["github_login"]}``。
+    #: 半配置成员（只配了飞书没配 GitHub）也在其中 —— 否则他们的提交会静默消失。
+    mapping_gaps: dict[str, list[str]] = field(default_factory=dict)
 
 
 def attribute(
@@ -74,7 +77,22 @@ def attribute(
         if member_id is not None:
             by_member[member_id].attendance.append(record)
 
-    unmapped = [
-        m for m in members if not m.github_login and not m.feishu_open_id
-    ]
-    return AttributionResult(by_member=by_member, unmapped=unmapped)
+    # 映射缺口按渠道分别计算：只配了飞书的成员，GitHub 提交无法归属他们，
+    # 但他们的飞书数据是能收进来的 —— 这既不是"完全未配置"，也不能静默放过。
+    mapping_gaps: dict[str, list[str]] = {}
+    for member in members:
+        gaps = [
+            name
+            for name, value in (
+                ("github_login", member.github_login),
+                ("feishu_open_id", member.feishu_open_id),
+            )
+            if not value
+        ]
+        if gaps and len(gaps) < 2:  # 两个都缺 = 完全未配置，归入 unmapped
+            mapping_gaps[member.member_id] = gaps
+
+    unmapped = [m for m in members if not m.github_login and not m.feishu_open_id]
+    return AttributionResult(
+        by_member=by_member, unmapped=unmapped, mapping_gaps=mapping_gaps
+    )

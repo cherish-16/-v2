@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+import warnings
 from datetime import UTC, date, datetime
 
 import httpx
@@ -91,6 +92,20 @@ class FeishuTaskSource(_FeishuBase):
             if not payload.get("has_more"):
                 break
             page_token = payload.get("page_token")
+            if not page_token:
+                warnings.warn(
+                    f"feishu task pagination truncated at {MAX_PAGES} pages "
+                    "(has_more=True but no page_token)",
+                    UserWarning,
+                    stacklevel=1,
+                )
+                break
+        else:
+            warnings.warn(
+                f"feishu task pagination truncated at {MAX_PAGES} pages",
+                UserWarning,
+                stacklevel=1,
+            )
 
         return [r for r in records if start <= r.updated_at < end]
 
@@ -142,6 +157,20 @@ class FeishuMessageSource(_FeishuBase):
             if not payload.get("has_more"):
                 break
             page_token = payload.get("page_token")
+            if not page_token:
+                warnings.warn(
+                    f"feishu message pagination truncated at {MAX_PAGES} pages "
+                    "(has_more=True but no page_token)",
+                    UserWarning,
+                    stacklevel=1,
+                )
+                break
+        else:
+            warnings.warn(
+                f"feishu message pagination truncated at {MAX_PAGES} pages",
+                UserWarning,
+                stacklevel=1,
+            )
 
         return [r for r in records if start <= r.created_at < end]
 

@@ -80,11 +80,15 @@ def test_late_and_leave_rendered():
 
 
 def test_no_attendance_keeps_backward_compatible_behavior():
+    """没有考勤数据时，行为与引入考勤前一致（仍是「无数据」）。"""
+    member = Member(
+        member_id="m1", name="张三", github_login="zhangsan", feishu_open_id="ou_1"
+    )
     report = generate_report(
         scope=ReportScope.PERSONAL,
         entity_id="m1",
         report_date=DAY,
-        members=[_member()],
+        members=[member],
         commits=[],
         tasks=[],
         messages=[],

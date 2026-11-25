@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import UTC, date, datetime
+from zoneinfo import ZoneInfo
 
 from daily_report.errors import TraceabilityError
 from daily_report.generation.attribution import AttributionResult, MemberData, attribute
@@ -25,7 +26,7 @@ from daily_report.models import (
 )
 
 
-def _to_items(data: MemberData) -> list[ReportItem]:
+def _to_items(data: MemberData, tz: str = "Asia/Shanghai") -> list[ReportItem]:
     """按「提交 → 任务 → 消息 → 考勤」的固定顺序生成条目。"""
     items: list[ReportItem] = []
 
@@ -66,7 +67,7 @@ def _to_items(data: MemberData) -> list[ReportItem]:
             ReportItem(
                 source_type="feishu_attendance",
                 source_id=record.record_id,
-                text=_attendance_text(record),
+                text=_attendance_text(record, tz),
                 occurred_at=record.checked_in_at
                 or datetime.combine(record.work_date, datetime.min.time(), tzinfo=UTC),
             )
@@ -74,7 +75,7 @@ def _to_items(data: MemberData) -> list[ReportItem]:
     return items
 
 
-def _attendance_text(record: AttendanceRecord) -> str:
+def _attendance_text(record: AttendanceRecord, tz_name: str = "Asia/Shanghai") -> str:
     """考勤条目文本。缺勤与请假没有打卡时间，不显示时刻。"""
     if record.status == "absent":
         return "考勤：缺勤"
@@ -82,7 +83,11 @@ def _attendance_text(record: AttendanceRecord) -> str:
         return "考勤：请假"
     if record.checked_in_at is None:
         return "考勤：未打卡"
-    stamp = record.checked_in_at.strftime("%H:%M")
+    try:
+        zone = ZoneInfo(tz_name)
+    except Exception:  # noqa: BLE001
+        zone = UTC
+    stamp = record.checked_in_at.astimezone(zone).strftime("%H:%M")
     if record.status == "late":
         return f"考勤：迟到 {stamp}"
     return f"考勤：出勤 {stamp}"
@@ -101,17 +106,43 @@ def _compose_note(
     missing_sources: Sequence[str],
     unmapped_names: Sequence[str] = (),
     no_data_names: Sequence[str] = (),
+    mapping_gap_names: Sequence[str] = (),
 ) -> str | None:
     parts: list[str] = []
     if not has_items:
         parts.append("无数据")
     if missing_sources:
         parts.append(f"来源缺失：{', '.join(missing_sources)}")
-    if unmapped_names:
-        parts.append(f"未配置映射成员：{'、'.join(unmapped_names)}")
+    missing_map = list(unmapped_names) + list(mapping_gap_names)
+    if missing_map:
+        parts.append(f"未配置映射成员：{'、'.join(missing_map)}")
     if no_data_names:
         parts.append(f"无数据成员：{'、'.join(no_data_names)}")
     return "；".join(parts) if parts else None
+
+
+def _mapping_gap_names(
+    members: Sequence[Member], result: AttributionResult
+) -> list[str]:
+    """把「缺哪个映射」翻译成可读的成员名。"""
+    names: list[str] = []
+    for member in members:
+        gaps = result.mapping_gaps.get(member.member_id)
+        if gaps:
+            names.append(f"{member.name}（缺 {'/'.join(gaps)}）")
+    return names
+
+
+def _own_mapping_gap(
+    members: Sequence[Member], result: AttributionResult, entity_id: str
+) -> list[str]:
+    """个人日报只标注「本人的」映射缺口，不写别人的。"""
+    return [
+        name
+        for name in _mapping_gap_names(members, result)
+        if name.split("（")[0]
+        == next((m.name for m in members if m.member_id == entity_id), None)
+    ]
 
 
 def generate_report(
@@ -126,20 +157,25 @@ def generate_report(
     attendance: Sequence[AttendanceRecord] = (),
     missing_sources: Sequence[str] = (),
     now: datetime | None = None,
+    tz: str = "Asia/Shanghai",
 ) -> DailyReport:
     generated_at = now or datetime.now(UTC)
     result = attribute(members, commits, tasks, messages, attendance)
 
     if scope is ReportScope.PERSONAL:
         data = result.by_member.get(entity_id, MemberData())
-        items = _to_items(data)
+        items = _to_items(data, tz)
         return DailyReport(
             scope=scope,
             entity_id=entity_id,
             report_date=report_date,
             items=items,
             generated_at=generated_at,
-            note=_compose_note(has_items=bool(items), missing_sources=missing_sources),
+            note=_compose_note(
+                has_items=bool(items),
+                missing_sources=missing_sources,
+                mapping_gap_names=_own_mapping_gap(members, result, entity_id),
+            ),
         )
 
     if scope is ReportScope.TEAM:
@@ -150,6 +186,7 @@ def generate_report(
             result=result,
             missing_sources=missing_sources,
             generated_at=generated_at,
+            tz=tz,
         )
 
     raise ValueError(f"unsupported scope: {scope!r}")
@@ -163,6 +200,7 @@ def _build_team(
     result: AttributionResult,
     missing_sources: Sequence[str],
     generated_at: datetime,
+    tz: str = "Asia/Shanghai",
 ) -> DailyReport:
     """把全组成员条目汇总成团队日报。
 
@@ -175,7 +213,7 @@ def _build_team(
 
     for member in members:
         data = result.by_member.get(member.member_id, MemberData())
-        member_items = _to_items(data)
+        member_items = _to_items(data, tz)
         if not member_items:
             no_data_names.append(member.name)
         for item in member_items:
@@ -199,5 +237,6 @@ def _build_team(
             missing_sources=missing_sources,
             unmapped_names=[m.name for m in result.unmapped],
             no_data_names=no_data_names,
+            mapping_gap_names=_mapping_gap_names(members, result),
         ),
     )

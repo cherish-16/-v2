@@ -25,7 +25,8 @@ def repo(tmp_path):
     conn = init_db(str(tmp_path / "r.db"))
     repository = Repository(conn)
     repository.upsert_members(
-        [Member(member_id="m1", name="张三", github_login="zhangsan", email="a@test")]
+        [Member(member_id="m1", name="张三", github_login="zhangsan",
+                feishu_open_id="ou_1", email="a@test")]
     )
     yield repository
     conn.close()
@@ -35,7 +36,7 @@ def _run(repo, sources=None, publishers=None):
     return run_daily(
         "team-1",
         DAY,
-        settings=load_settings({}),
+        settings=load_settings({"GITHUB_OWNER": "o", "GITHUB_REPO": "r"}),
         repo=repo,
         sources=sources or MockSourceBundle(),
         publishers=publishers or PublisherBundle(email=FakePublisher()),
@@ -65,7 +66,7 @@ def test_single_source_failure_does_not_abort(repo):
     summary = run_daily(
         "team-1",
         DAY,
-        settings=load_settings({}),
+        settings=load_settings({"GITHUB_OWNER": "o", "GITHUB_REPO": "r"}),
         repo=repo,
         sources=SourceBundle(
             FailingSource(), mock.task_source, mock.message_source
@@ -78,9 +79,10 @@ def test_single_source_failure_does_not_abort(repo):
 
 
 def test_push_failure_keeps_report(repo):
+    """AC-E5：全部推送渠道失败 → 日报仍入库，摘要标记 failed。"""
     publishers = PublisherBundle(email=FakePublisher(fail_email=True))
     summary = _run(repo, publishers=publishers)
-    assert summary.status in ("success", "partial")
+    assert summary.status == "failed"
     assert repo.get_report(ReportScope.TEAM, "team-1", DAY) is not None
 
 

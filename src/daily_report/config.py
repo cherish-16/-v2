@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from daily_report.errors import ConfigError
 
@@ -45,6 +46,9 @@ class Settings:
     feishu_bot_webhook: str | None = None
     max_pages: int = 10
     retry_times: int = 2
+    github_owner: str = ""
+    github_repo: str = ""
+    attendance_position: str = "end"
 
 
 def load_settings(env: Mapping[str, str] | None = None) -> Settings:
@@ -65,9 +69,18 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
     if source_mode == "live" and github_token is None:
         raise ConfigError("GITHUB_TOKEN is required when source_mode=live")
 
+    tz_name = _read(source, "DAILY_REPORT_TIMEZONE") or "Asia/Shanghai"
+    try:
+        ZoneInfo(tz_name)
+    except (ZoneInfoNotFoundError, ValueError) as exc:
+        # 拼错的时区会让整天的采集窗口平移，必须在启动时暴露而不是回退 UTC。
+        raise ConfigError(
+            f"invalid DAILY_REPORT_TIMEZONE: {tz_name!r} ({exc})"
+        ) from exc
+
     return Settings(
         source_mode=source_mode,
-        timezone=_read(source, "DAILY_REPORT_TIMEZONE") or "Asia/Shanghai",
+        timezone=tz_name,
         github_token=github_token,
         feishu_app_id=_read(source, "FEISHU_APP_ID"),
         feishu_app_secret=_read(source, "FEISHU_APP_SECRET"),
@@ -76,6 +89,8 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         smtp_user=_read(source, "SMTP_USER"),
         smtp_password=_read(source, "SMTP_PASSWORD"),
         feishu_bot_webhook=_read(source, "FEISHU_BOT_WEBHOOK"),
+        github_owner=_read(source, "GITHUB_OWNER") or "",
+        github_repo=_read(source, "GITHUB_REPO") or "",
         max_pages=_read_int(source, "DAILY_REPORT_MAX_PAGES", 10),
         retry_times=_read_int(source, "DAILY_REPORT_RETRY_TIMES", 2),
     )

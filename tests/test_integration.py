@@ -52,7 +52,7 @@ def test_full_pipeline_end_to_end(tmp_path):
     summary = run_daily(
         "team-1",
         DAY,
-        settings=load_settings({}),
+        settings=load_settings({"GITHUB_OWNER": "o", "GITHUB_REPO": "r"}),
         repo=repo,
         sources=sources,
         publishers=PublisherBundle(email=publisher),
@@ -69,7 +69,8 @@ def test_full_pipeline_end_to_end(tmp_path):
 
 def test_pipeline_is_repeatable(tmp_path):
     repo = Repository(init_db(str(tmp_path / "r2.db")))
-    repo.upsert_members([Member(member_id="m1", name="张三", github_login="zhangsan")])
+    repo.upsert_members([Member(member_id="m1", name="张三", github_login="zhangsan",
+        feishu_open_id="ou_1")])
     sources = MockSourceBundle(
         commits=[
             CommitRecord(
@@ -78,7 +79,7 @@ def test_pipeline_is_repeatable(tmp_path):
         ]
     )
     args = dict(
-        settings=load_settings({}),
+        settings=load_settings({"GITHUB_OWNER": "o", "GITHUB_REPO": "r"}),
         repo=repo,
         sources=sources,
         publishers=PublisherBundle(email=FakePublisher()),

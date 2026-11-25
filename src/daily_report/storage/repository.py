@@ -171,6 +171,10 @@ class Repository:
                 generated_at=excluded.generated_at,
                 body_json=excluded.body_json,
                 note=excluded.note
+            -- 降级保护：条目更少的新报告不得覆盖已存的更完整报告。
+            -- 采集源临时失败时重新生成，否则会把好日报冲成「无数据」。
+            WHERE json_array_length(excluded.body_json, '$.items')
+               >= json_array_length(daily_reports.body_json, '$.items')
             """,
             (
                 str(report.scope),
@@ -224,6 +228,27 @@ class Repository:
             ),
         )
         self._conn.commit()
+
+    def find_latest_run(self, team_id: str, run_date: date) -> RunSummary | None:
+        """返回该团队该日期的最近一次运行（任意状态），用于幂等判定。"""
+        row = self._conn.execute(
+            "SELECT status, collected_json, sent_json, failed_json, "
+            "started_at, finished_at FROM run_summaries "
+            "WHERE team_id=? AND run_date=? ORDER BY id DESC LIMIT 1",
+            (team_id, run_date.isoformat()),
+        ).fetchone()
+        if row is None:
+            return None
+        return RunSummary(
+            team_id=team_id,
+            run_date=run_date,
+            status=row[0],
+            collected=json.loads(row[1]),
+            sent=json.loads(row[2]),
+            failed=json.loads(row[3]),
+            started_at=_from_text(row[4]),
+            finished_at=None if row[5] is None else _from_text(row[5]),
+        )
 
     def find_successful_run(self, team_id: str, run_date: date) -> RunSummary | None:
         row = self._conn.execute(

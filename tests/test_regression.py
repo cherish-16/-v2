@@ -69,7 +69,7 @@ def _run(repo, sources, **kwargs):
     return run_daily(
         "team-1",
         DAY,
-        settings=load_settings({}),
+        settings=load_settings({"GITHUB_OWNER": "o", "GITHUB_REPO": "r"}),
         repo=repo,
         sources=sources,
         publishers=PublisherBundle(email=FakePublisher()),
@@ -110,7 +110,7 @@ def test_ac04_email_sent(env):
     run_daily(
         "team-1",
         DAY,
-        settings=load_settings({}),
+        settings=load_settings({"GITHUB_OWNER": "o", "GITHUB_REPO": "r"}),
         repo=repo,
         sources=sources,
         publishers=PublisherBundle(email=publisher),
