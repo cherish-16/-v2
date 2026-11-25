@@ -14,6 +14,7 @@ from datetime import UTC, date, datetime
 from daily_report.errors import TraceabilityError
 from daily_report.generation.attribution import AttributionResult, MemberData, attribute
 from daily_report.models import (
+    AttendanceRecord,
     CommitRecord,
     DailyReport,
     Member,
@@ -59,7 +60,32 @@ def _to_items(data: MemberData) -> list[ReportItem]:
                 occurred_at=message.created_at,
             )
         )
+    for record in data.attendance:
+        _require(record.record_id, "feishu_attendance")
+        items.append(
+            ReportItem(
+                source_type="feishu_attendance",
+                source_id=record.record_id,
+                text=_attendance_text(record),
+                occurred_at=record.checked_in_at
+                or datetime.combine(record.work_date, datetime.min.time(), tzinfo=UTC),
+            )
+        )
     return items
+
+
+def _attendance_text(record: AttendanceRecord) -> str:
+    """考勤条目文本。缺勤与请假没有打卡时间，不显示时刻。"""
+    if record.status == "absent":
+        return "考勤：缺勤"
+    if record.status == "leave":
+        return "考勤：请假"
+    if record.checked_in_at is None:
+        return "考勤：未打卡"
+    stamp = record.checked_in_at.strftime("%H:%M")
+    if record.status == "late":
+        return f"考勤：迟到 {stamp}"
+    return f"考勤：出勤 {stamp}"
 
 
 def _require(source_id: str, source_type: str) -> None:
@@ -97,11 +123,12 @@ def generate_report(
     commits: Sequence[CommitRecord],
     tasks: Sequence[TaskRecord],
     messages: Sequence[MessageRecord],
+    attendance: Sequence[AttendanceRecord] = (),
     missing_sources: Sequence[str] = (),
     now: datetime | None = None,
 ) -> DailyReport:
     generated_at = now or datetime.now(UTC)
-    result = attribute(members, commits, tasks, messages)
+    result = attribute(members, commits, tasks, messages, attendance)
 
     if scope is ReportScope.PERSONAL:
         data = result.by_member.get(entity_id, MemberData())

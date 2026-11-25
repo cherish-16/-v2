@@ -102,6 +102,16 @@ def run_daily(
         failed["feishu_message"] = type(exc).__name__
         missing_sources.append("feishu_message")
 
+    # 考勤源可选：未配置时整段跳过，行为与变更前一致
+    attendance = []
+    if sources.attendance_source is not None:
+        try:
+            attendance = sources.attendance_source.collect_attendance(since, until)
+            collected["feishu_attendance"] = len(attendance)
+        except Exception as exc:  # noqa: BLE001
+            failed["feishu_attendance"] = type(exc).__name__
+            missing_sources.append("feishu_attendance")
+
     # ---- 生成：每个成员一份 + 团队一份 ----
     members = repo.list_members()
     personal_reports = []
@@ -114,6 +124,7 @@ def run_daily(
             commits=commits,
             tasks=tasks,
             messages=messages,
+            attendance=attendance,
             missing_sources=missing_sources,
             now=started_at,
         )
@@ -128,6 +139,7 @@ def run_daily(
         commits=commits,
         tasks=tasks,
         messages=messages,
+        attendance=attendance,
         missing_sources=missing_sources,
         now=started_at,
     )

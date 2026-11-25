@@ -13,6 +13,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from daily_report.models import (
+    AttendanceRecord,
     CommitRecord,
     Member,
     MessageRecord,
@@ -25,7 +26,7 @@ class MemberData:
     commits: list[CommitRecord] = field(default_factory=list)
     tasks: list[TaskRecord] = field(default_factory=list)
     messages: list[MessageRecord] = field(default_factory=list)
-    attendance: list[object] = field(default_factory=list)
+    attendance: list[AttendanceRecord] = field(default_factory=list)
 
     def is_empty(self) -> bool:
         return not (self.commits or self.tasks or self.messages or self.attendance)
@@ -42,6 +43,7 @@ def attribute(
     commits: Sequence[CommitRecord],
     tasks: Sequence[TaskRecord],
     messages: Sequence[MessageRecord],
+    attendance: Sequence[AttendanceRecord] = (),
 ) -> AttributionResult:
     by_login = {
         m.github_login: m.member_id for m in members if m.github_login
@@ -66,6 +68,11 @@ def attribute(
         member_id = by_open_id.get(message.sender_open_id or "")
         if member_id is not None:
             by_member[member_id].messages.append(message)
+
+    for record in attendance:
+        member_id = by_open_id.get(record.member_open_id or "")
+        if member_id is not None:
+            by_member[member_id].attendance.append(record)
 
     unmapped = [
         m for m in members if not m.github_login and not m.feishu_open_id
