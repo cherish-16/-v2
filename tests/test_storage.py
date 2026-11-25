@@ -11,7 +11,8 @@ from daily_report.storage.schema import init_db
 @pytest.fixture
 def repo(tmp_path):
     conn = init_db(str(tmp_path / "test.db"))
-    return Repository(conn)
+    yield Repository(conn)
+    conn.close()
 
 
 def test_init_db_is_idempotent(tmp_path):

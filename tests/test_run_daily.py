@@ -27,7 +27,8 @@ def repo(tmp_path):
     repository.upsert_members(
         [Member(member_id="m1", name="张三", github_login="zhangsan", email="a@test")]
     )
-    return repository
+    yield repository
+    conn.close()
 
 
 def _run(repo, sources=None, publishers=None):
