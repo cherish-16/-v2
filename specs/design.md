@@ -230,6 +230,30 @@ def run_daily(
 - 单源失败：记录到 `RunSummary.failed`，其余继续。
 - 编排层串行调用，无共享可写文件。
 
+### 3.6 考勤采集（v1.1 变更新增）
+
+```python
+class AttendanceSource(Protocol):
+    def collect_attendance(
+        self, since: datetime, until: datetime
+    ) -> list[AttendanceRecord]: ...
+
+@dataclass(frozen=True)
+class AttendanceRecord:
+    record_id: str                    # 非空，可追溯
+    member_open_id: str | None
+    work_date: date
+    status: str                       # present | absent | late | leave
+    checked_in_at: datetime | None    # UTC
+    checked_out_at: datetime | None   # UTC
+```
+
+- ``SourceBundle`` 增加可选字段 ``attendance_source: AttendanceSource | None = None``：未配置时行为与变更前完全一致（向后兼容）。
+- ``generate_report`` 增加关键字参数 ``attendance: Sequence[AttendanceRecord] = ()``，默认空。
+- 考勤条目 ``source_type="feishu_attendance"``，文本按 ``status`` 渲染：
+  ``present`` → ``考勤：出勤 HH:MM``；``absent`` → ``考勤：缺勤``；``late`` → ``考勤：迟到 HH:MM``；``leave`` → ``考勤：请假``。
+- 条目插入位置由 ``Settings.attendance_position`` 决定（``"after_commits"`` | ``"end"``，默认 ``"end"``）。
+
 ## 4. 技术选型 ADR
 
 ### ADR-001　HTTP 客户端选型
@@ -271,6 +295,16 @@ def run_daily(
 | 备选项 | ① 真实实现内嵌 `if mock` 分支；② 端口 + 双实现；③ 只做 Mock |
 | 决策 | 端口 + 真实/Mock 双实现，由 `Settings.source_mode` 切换 |
 | 理由 | 内嵌分支会让真实与模拟逻辑互相污染，无法独立测试；只做 Mock 则交付物不完整。双实现共享同一 `Protocol`，测试可直接注入替身，配置一行即可切换（对应指导书 FAQ“数据源可替换”要求） |
+
+### ADR-005　考勤数据源的接入方式
+
+| 项 | 内容 |
+|---|---|
+| 状态 | 已采纳（v1.1 变更） |
+| 背景 | 需要在已有四层结构上接入第四类数据源，且不得破坏既有三源流程 |
+| 备选项 | ① 修改既有 `collect_tasks` 签名塞入考勤；② 新增独立 Protocol；③ 在生成层直接读库 |
+| 决策 | 新增独立 `AttendanceSource` Protocol，`SourceBundle` 增加可选字段 |
+| 理由 | ① 会让任务采集承担两种语义，违反单一职责；③ 让生成层绕过采集层，破坏分层。② 与既有端口模式一致，可选字段保证未配置时零影响；实现只需改一个装配点 |
 
 ## 5. 非功能性约束
 

@@ -34,8 +34,8 @@
 | 编号 | 任务 | 交付物 | 验收标准（可执行） | 依赖 | 提交 | 状态 |
 |---|---|---|---|---|---|---|
 | T3-09 | 协作归属 | `generation/attribution.py` | `pytest tests/test_attribution.py` 通过：按 GitHub login / 飞书 open_id 归组；未配置映射的成员被跳过并计入 `unmapped`；不按消息发言者推测协作归属 | T3-07、T3-08 | c6db4a7 | DONE |
-| T3-10 | 个人日报生成 | `generation/builder.py`（`generate_report` scope=PERSONAL） | `pytest tests/test_builder_personal.py` 通过：条目顺序 提交→任务→消息；每条 `source_id` 非空；无数据返回 `note="无数据"`；缺少某源时 `note` 含"来源缺失：<源>"；`source_id` 为空时抛 `TraceabilityError` | T3-09 | a150edf | DONE |
-| T3-11 | 团队日报生成 | `generation/builder.py`（scope=TEAM） | `pytest tests/test_builder_team.py` 通过：按 member_id 分组而非按提交条数拼接；缺失成员列在 `note`；全组无数据仍返回非 `None` | T3-10 | 85a6e8c | DONE |
+| T3-10 ⚠受T4-04影响 | 个人日报生成 | `generation/builder.py`（`generate_report` scope=PERSONAL） | `pytest tests/test_builder_personal.py` 通过：条目顺序 提交→任务→消息；每条 `source_id` 非空；无数据返回 `note="无数据"`；缺少某源时 `note` 含"来源缺失：<源>"；`source_id` 为空时抛 `TraceabilityError` | T3-09 | a150edf | DONE |
+| T3-11 ⚠受T4-04影响 | 团队日报生成 | `generation/builder.py`（scope=TEAM） | `pytest tests/test_builder_team.py` 通过：按 member_id 分组而非按提交条数拼接；缺失成员列在 `note`；全组无数据仍返回非 `None` | T3-10 | 85a6e8c | DONE |
 
 ### 1.4 渲染与推送层
 
@@ -97,6 +97,8 @@ graph LR
     T3-18 --> T4-01
     T4-01 --> T4-02
     T4-02 --> T4-03
+    T3-10 -.-> T4-04
+    T3-11 -.-> T4-04
     T4-03 --> T4-04
     T4-04 --> T4-05
     T4-05 --> T4-06
