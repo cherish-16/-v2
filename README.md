@@ -24,26 +24,99 @@
 
 ## 技术栈
 
-- Python 3.12+，依赖管理 `uv`
-- HTTP 客户端 `httpx`（统一超时与重试）
-- 存储：SQLite（标准库 `sqlite3`，参数化查询）
-- 测试：`pytest` / `pytest-cov`；静态扫描：`ruff`
-- 凭证：仅环境变量注入，禁止入库
+| 类别 | 选型 | 说明 |
+|---|---|---|
+| 语言 | Python ≥ 3.12 | 使用 `StrEnum`、`datetime.UTC`、`zoneinfo` 等标准库特性 |
+| 依赖管理 | uv（`uv.lock` 锁定） | `uv sync --dev` 一次装齐运行期与开发依赖 |
+| HTTP | httpx ≥ 0.27 | 统一 10s 超时，按状态码分流重试（`net.py`，ADR-003） |
+| 存储 | SQLite（标准库 `sqlite3`） | 单文件零运维；WAL；全部参数化 SQL，`storage/repository.py` 是唯一写库点 |
+| 时区 | 标准库 `zoneinfo` + `tzdata` | 全量存 UTC，按团队时区换算“某一天”的采集窗口 |
+| 命令行 | 标准库 `argparse` | `members import/list` 与 `run` 两个子命令 |
+| 邮件 | 标准库 `smtplib`（SMTP_SSL） | 逐收件人发送、失败隔离、邮箱脱敏 |
+| 飞书 | 开放平台 REST + 群机器人 webhook | 任务 / 消息 / 考勤采集，tenant token 实例内缓存 |
+| 配置 | 环境变量 + 自解析 `.env` | 只覆盖 `KEY=VALUE` 子集，不引入 python-dotenv；密钥唯一读取点为 `config.py` |
+| 测试 | pytest ≥ 8 + pytest-cov | 单元 / 集成 / 架构守护 / 回归四层，130 个用例 |
+| 静态检查 | ruff（`E/F/I/UP/B`，行宽 100） | 零告警为合并门槛 |
+| 图示 | PlantUML | `docs/uml/*.puml` 为源文件，导出 PNG 嵌入各报告 |
+
+运行期第三方依赖只有 `httpx` 与 `tzdata`，其余能力均来自标准库。
 
 ## 快速开始
 
+### 环境要求
+
+| 项 | 要求 |
+|---|---|
+| 操作系统 | Windows 10/11（批处理 + 任务计划程序）、Linux / macOS（crontab / systemd） |
+| Python | ≥ 3.12（`pyproject.toml` 声明；开发环境在 3.13 上验证） |
+| 包管理 | uv 0.13+（已在 0.13.7 验证）；不使用 uv 时可用任意 venv + `pip install -e .` |
+| 网络 | mock / demo 模式无需外网；live 模式需可访问 GitHub API、飞书开放平台、SMTP 服务器与飞书 webhook |
+| 磁盘 | 本地 SQLite 单文件，按 ≥ 90 天历史预留 1 GB |
+
+### 安装依赖
+
 ```bash
-# 1. 安装依赖
+git clone <repo>
+cd diary_report_generator2
+
+# 运行期依赖 + 开发依赖（pytest / pytest-cov / ruff）
 uv sync --dev
+```
 
-# 2. 生成配置文件模板并填写（mock 模式无需任何凭证）
-cp .env.example .env
+### 启动方式
 
-# 3. 离线演示：使用内置演示数据，无需外部凭证
+**1）离线演示：零配置、无需任何凭证**
+
+```bash
 uv run python -m daily_report run --team demo --demo --print
 ```
 
-`--demo` 会使用内置的 Mock 数据源，适合课堂演示与首次验证。
+`--demo` 使用内置的三人演示数据（提交 / 任务 / 消息 / 考勤），会打印 `status`、JSON 摘要与日报正文。同日重复执行返回 `skipped`；加 `--force` 可强制重跑。
+
+**2）mock 模式：自备成员与数据库，验证链路与配置**
+
+```bash
+# 复制配置模板（默认 DAILY_REPORT_SOURCE_MODE=mock）
+# Windows 命令提示符用：copy .env.example .env
+cp .env.example .env
+
+# 导入成员映射并核对缺失字段
+uv run python -m daily_report members import --file members.example.json --db daily_report.db
+uv run python -m daily_report members list --db daily_report.db
+
+# 生成日报（mock 模式不调用真实 API，采集为空，用于验证流程）
+uv run python -m daily_report run --team t1 --print --db daily_report.db
+```
+
+**3）live 模式：采集真实数据并推送**
+
+在 `.env` 中填入 `GITHUB_TOKEN`、`FEISHU_APP_ID` / `FEISHU_APP_SECRET`，并把 `DAILY_REPORT_SOURCE_MODE` 改为 `live`，然后：
+
+```bash
+uv run python -m daily_report run --team t1 --db daily_report.db
+```
+
+只配置了部分渠道时仅推送已配置渠道：邮件需要 `SMTP_*` 齐全，飞书机器人群需要 `FEISHU_BOT_WEBHOOK`。
+
+**4）Windows 一键运行**
+
+双击仓库根目录的 `推送日报.bat`（内部执行 `run --team t1 --force --print --db my.db`，并强制 UTF-8 输出）。
+
+**5）定时任务**
+
+- Windows：任务计划程序 → 创建基本任务 → 每天 18:00 → 启动程序选择 `推送日报.bat`，起始位置设为仓库根目录。
+- Linux / macOS：
+
+  ```bash
+  0 18 * * * cd /path/to/diary_report_generator2 && uv run python -m daily_report run --team t1 --db daily_report.db >> /var/log/daily_report.log 2>&1
+  ```
+
+### 安装自检
+
+```bash
+uv run pytest                        # 全量测试
+uv run ruff check src tests          # 静态检查（要求零告警）
+```
 
 ## 配置（环境变量）
 
@@ -62,11 +135,17 @@ uv run python -m daily_report run --team demo --demo --print
 
 ## 命令行用法
 
+| 子命令 | 参数 | 说明 |
+|---|---|---|
+| `members import` | `--file`（必填）、`--db`（默认 `daily_report.db`） | 从 JSON 导入成员映射 |
+| `members list` | `--db` | 列出成员及缺失的映射字段 |
+| `run` | `--team`（必填）、`--date YYYY-MM-DD`、`--print`、`--force`、`--demo`、`--db` | 执行一次完整流程；`--date` 缺省为团队时区“今天”，`--print` 打印日报正文，`--force` 忽略当日幂等记录，`--demo` 使用内置演示数据 |
+
 ```bash
 # 导入成员映射（JSON）
 uv run python -m daily_report members import --file members.json --db daily_report.db
 
-# 查看已配置成员
+# 查看已配置成员（并提示缺失的映射字段）
 uv run python -m daily_report members list --db daily_report.db
 
 # 生成并推送指定日期的日报
@@ -74,9 +153,18 @@ uv run python -m daily_report run --team <team_id> --date 2026-11-26
 
 # 仅打印日报正文，不推送
 uv run python -m daily_report run --team <team_id> --print
+
+# 强制重跑（忽略当日已有成功运行）
+uv run python -m daily_report run --team <team_id> --force
 ```
 
-退出码：`0` 成功或重复触发被忽略；`2` 参数错误。
+退出码：
+
+| 退出码 | 含义 |
+|---|---|
+| 0 | `success` / `partial` / `skipped`（含重复触发被忽略） |
+| 1 | 运行失败（`failed`）、`ReportError`、成员文件错误、未配置成员 |
+| 2 | 命令行参数错误 |
 
 ## 测试与质量门禁
 
@@ -97,22 +185,52 @@ uv run ruff check src tests   # 静态扫描（要求零告警）
                          ↑ 数据模型 models.py / 存储 storage/
 ```
 
-```text
-src/daily_report/
-├── collectors/      # GitHub / 飞书 / Mock 数据源
-├── generation/      # 归组与日报构建（个人 / 团队）
-├── publishers/      # 邮件 / 飞书机器人 / Fake
-├── render/          # 日报渲染
-├── storage/         # SQLite 仓储与表结构
-├── orchestration/   # run_daily 全流程编排
-├── models.py        # 数据实体
-├── config.py        # 环境变量配置
-├── members.py       # 成员映射
-├── net.py           # HTTP 超时与重试
-└── cli.py           # 命令行入口
-```
+架构约束由 `tests/test_architecture.py` 守护：下层模块不得 import `orchestration`，SQL 只允许出现在 `storage/`。
 
-架构约束由 `tests/test_architecture.py` 守护。
+## 目录结构
+
+```text
+diary_report_generator2/
+├── .env.example                  # 配置模板（复制为 .env；真实凭证不入库）
+├── pyproject.toml                # 依赖声明、pytest / ruff 配置
+├── uv.lock                       # 依赖锁定文件
+├── members.example.json          # 成员映射样例（members.json 为本机配置，已忽略）
+├── 推送日报.bat                  # Windows 一键运行脚本
+├── README.md
+│
+├── src/daily_report/
+│   ├── __main__.py               # python -m daily_report 入口
+│   ├── cli.py                    # 子命令解析与退出码
+│   ├── config.py                 # 环境变量 / .env 装配（密钥唯一读取点）
+│   ├── errors.py                 # ReportError 异常体系
+│   ├── members.py                # 成员 JSON 加载与校验
+│   ├── models.py                 # 领域模型（UTC 归一、可追溯约束）
+│   ├── net.py                    # HTTP 超时与按状态码分流重试
+│   ├── collectors/               # 采集层：base 端口、github、feishu、mock
+│   ├── generation/               # 生成层：attribution 归组、builder 构建
+│   ├── render/                   # 渲染层：纯文本 / 邮件 HTML
+│   ├── publishers/               # 推送层：base 端口、email、feishu_bot、fake
+│   ├── storage/                  # 持久化：schema DDL、repository（唯一写 SQL 处）
+│   └── orchestration/            # 编排：run_daily（幂等、失败隔离、摘要落库）
+│
+├── tests/                        # pytest 用例（单元 / 集成 / 架构守护 / 回归）
+├── scripts/
+│   ├── check_spec_drift.py       # 规范守护：改 src 未改 specs 时告警
+│   └── generate_analysis_report.py
+├── specs/                        # 最高约束规范
+│   ├── proposal.md               # 范围与成功标准
+│   ├── design.md                 # 架构、数据模型、接口契约、ADR
+│   └── tasks.md                  # 任务分解与验收标准
+├── docs/                         # 过程文档
+│   ├── 需求分析报告.md
+│   ├── 系统分析报告.md
+│   ├── 系统设计报告.md
+│   ├── 项目总结报告.md
+│   ├── uml/                      # PlantUML 源文件（.puml）与导出 PNG
+│   └── superpowers/plans/        # 工作流计划记录
+│
+└── daily_report.db               # 运行时生成的 SQLite 数据库（已忽略，不提交）
+```
 
 ## 规范与文档
 
@@ -122,7 +240,7 @@ src/daily_report/
 | [specs/design.md](specs/design.md) | 系统架构、数据模型、接口契约、ADR |
 | [specs/tasks.md](specs/tasks.md) | 任务分解与验收标准 |
 | `docs/` | 需求分析、用例图、变更审核、code-review、一致性检查、规范审计、回归测试、总结报告、AI 使用声明等过程文档 |
-| `docs/uml/` | PlantUML 用例图与业务流程图源文件 |
+| `docs/uml/` | PlantUML 源文件与导出图：用例图、业务流程图、四层架构图、领域模型/端口/异常类图、3 张序列图、ER 图等 14 份 |
 | `docs/superpowers/plans/` | 工作流计划记录 |
 
 规范即事实来源：**代码与规范冲突时，要么改代码，要么走规范变更流程**（SDD 原则⑤）。规范守护由 `scripts/check_spec_drift.py` 与自检记录保障。
