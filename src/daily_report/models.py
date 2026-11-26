@@ -34,6 +34,9 @@ class Member:
     github_login: str | None = None
     feishu_open_id: str | None = None
     email: str | None = None
+    #: 该成员在 git 里用过的邮箱。GitHub 未关联账号时，提交上的 author_login
+    #: 是 None，只能靠邮箱把人对应起来；默认空元组保证向后兼容。
+    git_emails: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -43,6 +46,8 @@ class CommitRecord:
     message: str
     committed_at: datetime
     repo: str
+    #: 提交里记录的邮箱；GitHub 未关联账号时这是唯一的归属线索。
+    author_email: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "committed_at", ensure_utc(self.committed_at))

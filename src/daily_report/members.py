@@ -59,6 +59,7 @@ def load_member_file(path: str | Path) -> list[Member]:
                 github_login=(entry.get("github_login") or None),
                 feishu_open_id=(entry.get("feishu_open_id") or None),
                 email=(entry.get("email") or None),
+                git_emails=tuple(entry.get("git_emails") or ()),
             )
         )
 

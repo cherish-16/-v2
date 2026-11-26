@@ -50,6 +50,7 @@ class Settings:
     github_owner: str = ""
     insecure_tls: bool = False
     github_repo: str = ""
+    github_branch: str | None = None
     attendance_position: str = "end"
 
 
@@ -123,6 +124,7 @@ def load_settings(
         insecure_tls=(_read(source, "DAILY_REPORT_INSECURE_TLS") or "").lower()
         in ("1", "true", "yes"),
         github_repo=_read(source, "GITHUB_REPO") or "",
+        github_branch=_read(source, "GITHUB_BRANCH"),
         max_pages=_read_int(source, "DAILY_REPORT_MAX_PAGES", 10),
         retry_times=_read_int(source, "DAILY_REPORT_RETRY_TIMES", 2),
     )

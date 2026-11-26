@@ -112,7 +112,9 @@ def _build_sources(settings: Settings, demo: bool = False) -> SourceBundle:
 
     client = httpx.Client(verify=not settings.insecure_tls)
     return SourceBundle(
-        commit_source=GitHubCommitSource(client, settings.github_token or ""),
+        commit_source=GitHubCommitSource(
+            client, settings.github_token or "", branch=settings.github_branch
+        ),
         task_source=FeishuTaskSource(
             client, settings.feishu_app_id or "", settings.feishu_app_secret or ""
         ),

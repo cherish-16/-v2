@@ -54,11 +54,20 @@ def attribute(
     by_open_id = {
         m.feishu_open_id: m.member_id for m in members if m.feishu_open_id
     }
+    # GitHub 未关联账号的提交，author_login 是 "xxx(unmapped)" 之类的占位值，
+    # 只能靠提交邮箱归属。按小写比较，避免大小写差异漏匹配。
+    by_email: dict[str, str] = {}
+    for m in members:
+        for addr in m.git_emails:
+            if addr:
+                by_email[addr.strip().lower()] = m.member_id
 
     by_member: dict[str, MemberData] = {m.member_id: MemberData() for m in members}
 
     for commit in commits:
         member_id = by_login.get(commit.author_login)
+        if member_id is None and commit.author_email:
+            member_id = by_email.get(commit.author_email.strip().lower())
         if member_id is not None:
             by_member[member_id].commits.append(commit)
 
@@ -84,7 +93,7 @@ def attribute(
         gaps = [
             name
             for name, value in (
-                ("github_login", member.github_login),
+                ("github_login", member.github_login or member.git_emails),
                 ("feishu_open_id", member.feishu_open_id),
             )
             if not value
@@ -92,7 +101,11 @@ def attribute(
         if gaps and len(gaps) < 2:  # 两个都缺 = 完全未配置，归入 unmapped
             mapping_gaps[member.member_id] = gaps
 
-    unmapped = [m for m in members if not m.github_login and not m.feishu_open_id]
+    unmapped = [
+        m
+        for m in members
+        if not m.github_login and not m.git_emails and not m.feishu_open_id
+    ]
     return AttributionResult(
         by_member=by_member, unmapped=unmapped, mapping_gaps=mapping_gaps
     )

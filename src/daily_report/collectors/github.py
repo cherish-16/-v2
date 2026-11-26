@@ -26,10 +26,19 @@ def _iso_z(moment: datetime) -> str:
 
 
 class GitHubCommitSource:
-    def __init__(self, client: httpx.Client, token: str, max_pages: int = 10) -> None:
+    def __init__(
+        self,
+        client: httpx.Client,
+        token: str,
+        max_pages: int = 10,
+        branch: str | None = None,
+    ) -> None:
         self._client = client
         self._token = token
         self._max_pages = max_pages
+        #: 不指定时用仓库默认分支。活跃开发常在 feature 分支上，
+        #: 只看默认分支会漏掉大部分提交。
+        self._branch = branch
 
     def collect_commits(
         self,
@@ -68,6 +77,7 @@ class GitHubCommitSource:
                     "until": _iso_z(until),
                     "per_page": PER_PAGE,
                     "page": page,
+                    **({"sha": self._branch} if self._branch else {}),
                 },
                 headers={
                     "Authorization": f"Bearer {self._token}",
@@ -98,10 +108,12 @@ class GitHubCommitSource:
         committed_at = datetime.fromisoformat(
             item["commit"]["author"]["date"].replace("Z", "+00:00")
         )
+        author_email = (item.get("commit", {}).get("author") or {}).get("email")
         return CommitRecord(
             sha=item["sha"],
             author_login=login,
             message=item["commit"]["message"],
             committed_at=committed_at.astimezone(UTC),
             repo=f"{owner}/{repo}",
+            author_email=author_email,
         )

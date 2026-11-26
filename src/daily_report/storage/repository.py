@@ -54,16 +54,25 @@ class Repository:
     def upsert_members(self, members: Sequence[Member]) -> None:
         self._conn.executemany(
             """
-            INSERT INTO members (member_id, name, github_login, feishu_open_id, email)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO members
+                (member_id, name, github_login, feishu_open_id, email, git_emails)
+            VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(member_id) DO UPDATE SET
                 name=excluded.name,
                 github_login=excluded.github_login,
                 feishu_open_id=excluded.feishu_open_id,
-                email=excluded.email
+                email=excluded.email,
+                git_emails=excluded.git_emails
             """,
             [
-                (m.member_id, m.name, m.github_login, m.feishu_open_id, m.email)
+                (
+                    m.member_id,
+                    m.name,
+                    m.github_login,
+                    m.feishu_open_id,
+                    m.email,
+                    json.dumps(list(m.git_emails), ensure_ascii=False),
+                )
                 for m in members
             ],
         )
@@ -71,7 +80,7 @@ class Repository:
 
     def list_members(self) -> list[Member]:
         rows = self._conn.execute(
-            "SELECT member_id, name, github_login, feishu_open_id, email "
+            "SELECT member_id, name, github_login, feishu_open_id, email, git_emails "
             "FROM members ORDER BY rowid"
         ).fetchall()
         return [
@@ -81,6 +90,7 @@ class Repository:
                 github_login=row[2],
                 feishu_open_id=row[3],
                 email=row[4],
+                git_emails=tuple(json.loads(row[5])) if row[5] else (),
             )
             for row in rows
         ]
@@ -91,11 +101,18 @@ class Repository:
         cur = self._conn.executemany(
             """
             INSERT OR IGNORE INTO commit_records
-                (sha, author_login, message, committed_at, repo)
-            VALUES (?, ?, ?, ?, ?)
+                (sha, author_login, message, committed_at, repo, author_email)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
             [
-                (r.sha, r.author_login, r.message, _to_text(r.committed_at), r.repo)
+                (
+                    r.sha,
+                    r.author_login,
+                    r.message,
+                    _to_text(r.committed_at),
+                    r.repo,
+                    r.author_email,
+                )
                 for r in records
             ],
         )

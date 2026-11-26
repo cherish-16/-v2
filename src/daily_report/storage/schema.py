@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS members (
     name           TEXT NOT NULL,
     github_login   TEXT,
     feishu_open_id TEXT,
-    email          TEXT
+    email          TEXT,
+    git_emails     TEXT
 );
 
 CREATE TABLE IF NOT EXISTS commit_records (
@@ -21,7 +22,8 @@ CREATE TABLE IF NOT EXISTS commit_records (
     author_login TEXT NOT NULL,
     message      TEXT NOT NULL,
     committed_at TEXT NOT NULL,
-    repo         TEXT NOT NULL
+    repo         TEXT NOT NULL,
+    author_email TEXT
 );
 
 CREATE TABLE IF NOT EXISTS task_records (
