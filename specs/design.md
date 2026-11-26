@@ -252,7 +252,7 @@ class AttendanceRecord:
 - ``generate_report`` 增加关键字参数 ``attendance: Sequence[AttendanceRecord] = ()``，默认空。
 - 考勤条目 ``source_type="feishu_attendance"``，文本按 ``status`` 渲染：
   ``present`` → ``考勤：出勤 HH:MM``；``absent`` → ``考勤：缺勤``；``late`` → ``考勤：迟到 HH:MM``；``leave`` → ``考勤：请假``。
-- 条目插入位置由 ``Settings.attendance_position`` 决定（``"after_commits"`` | ``"end"``，默认 ``"end"``）。
+- 考勤条目统一追加在个人日报条目末尾（实现未提供可配置插入位置；`Settings.attendance_position` 字段暂保留未使用，若启用须先走规范变更）。
 
 ## 4. 技术选型 ADR
 
