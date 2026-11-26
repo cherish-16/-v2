@@ -1,0 +1,60 @@
+@startuml 系统运行主流程图
+' 系统设计报告 1.4 总体流程（PlantUML 活动图）
+' 渲染：java -jar plantuml.jar docs/uml/系统运行主流程图.puml -tpng -charset UTF-8
+title 智能日报生成器 v2 · 系统运行主流程
+
+skinparam defaultFontSize 12
+skinparam ActivityBackgroundColor #F7F9FC
+skinparam ActivityBorderColor #5A6B8C
+
+|触发与入口|
+start
+:系统计划任务 18:00 触发\n/ 双击 推送日报.bat / 命令行调用;
+:CLI 解析参数\n--team / --date / --force;
+:装载配置并初始化数据库\nconfig.py 为密钥唯一读取点，建表幂等;
+
+|编排调度|
+:幂等检查\nfind_latest_run(team_id, date);
+if (当日已有 success/partial 记录\n且未指定 --force?) then (是)
+  :返回 status=skipped\n不重复采集、不重复推送;
+  stop
+else (否)
+endif
+
+|采集层|
+fork
+  :GitHub 提交采集\n(UTC 日区间、只读令牌、分页上限);
+fork again
+  :飞书任务采集;
+fork again
+  :飞书消息采集\n(撤回消息保留并标注);
+fork again
+  :飞书考勤采集\n(可选来源，默认关闭);
+end fork
+:汇总采集结果\n单源失败不中断其余来源：\n失败写入 RunSummary.failed，\n来源缺失写入日报 note;
+
+|生成层|
+:attribution 按 GitHub login / 飞书 open_id 归组;
+note right
+  未配置映射的成员计入 unmapped，
+  不按消息发言者推测归属
+end note
+:builder 生成个人日报 + 团队日报;
+note right
+  每条条目必须携带 source_type / source_id，
+  不可追溯即抛 TraceabilityError
+end note
+
+|推送层|
+fork
+  :邮件推送\n(逐收件人发送，单收件人失败隔离);
+fork again
+  :飞书机器人推送\n(webhook);
+end fork
+:汇总推送结果\n单渠道失败不影响另一渠道，\n失败原因中的邮箱脱敏;
+
+|持久化与输出|
+:RunSummary 与日报正文落库\n(推送全失败时日报仍入库);
+:输出运行摘要\ncollected / sent / failed;
+stop
+@enduml

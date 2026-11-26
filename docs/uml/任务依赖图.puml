@@ -1,0 +1,97 @@
+@startuml 任务依赖图
+' 系统设计报告 4.4 任务依赖图（PlantUML 组件依赖图）
+' 渲染：java -jar plantuml.jar docs/uml/任务依赖图.puml -tpng -charset UTF-8
+title 智能日报生成器 v2 · 任务依赖
+
+skinparam defaultFontSize 11
+skinparam packageStyle rectangle
+skinparam card {
+  BackgroundColor #F7F9FC
+  BorderColor #5A6B8C
+}
+skinparam ArrowColor #5A6B8C
+
+package "第 3 周 · 共享基础层" {
+  card "T3-01\n工程骨架与工具链" as T301
+  card "T3-02\n领域模型与异常" as T302
+  card "T3-03\n配置装配" as T303
+  card "T3-04\n存储结构与仓储" as T304
+  card "T3-05\n网络请求助手" as T305
+}
+
+package "第 3 周 · 采集层" {
+  card "T3-06\n采集端口与 Mock" as T306
+  card "T3-07\nGitHub 采集" as T307
+  card "T3-08\n飞书任务与消息采集" as T308
+}
+
+package "第 3 周 · 生成层" {
+  card "T3-09\n协作归属" as T309
+  card "T3-10\n个人日报生成" as T310
+  card "T3-11\n团队日报生成" as T311
+}
+
+package "第 3 周 · 渲染与推送层" {
+  card "T3-12\n文本与邮件渲染" as T312
+  card "T3-13\n邮件推送" as T313
+  card "T3-14\n飞书机器人推送" as T314
+}
+
+package "第 3 周 · 编排与交付" {
+  card "T3-15\n主编排与幂等" as T315
+  card "T3-16\n命令行入口" as T316
+  card "T3-17\n集成测试与分层检查" as T317
+  card "T3-18\n质量收口与规范同步" as T318
+}
+
+package "第 4 周 · 变更涟漪演练与交付" {
+  card "T4-01\n变更单受理与规范同步" as T401
+  card "T4-02\n任务与依赖更新" as T402
+  card "T4-03\n考勤采集实现" as T403
+  card "T4-04\n生成层容纳考勤条目" as T404
+  card "T4-05\n全量回归" as T405
+  card "T4-06\n规范守护自检" as T406
+  card "T4-07\n安全自检" as T407
+  card "T4-08\n答辩追问清单与模拟答辩" as T408
+  card "T4-09\n总结与审计报告" as T409
+}
+
+T301 --> T302
+T302 --> T303
+T302 --> T304
+T302 --> T305
+T304 --> T306
+T305 --> T307
+T305 --> T308
+T306 --> T307
+T306 --> T308
+T307 --> T309
+T308 --> T309
+T309 --> T310
+T310 --> T311
+T311 --> T312
+T312 --> T313
+T305 --> T314
+T312 --> T314
+T313 --> T315
+T314 --> T315
+T315 --> T316
+T316 --> T317
+T317 --> T318
+T318 --> T401
+T401 --> T402
+T402 --> T403
+T403 --> T404
+T310 ..> T404
+T311 ..> T404
+T404 --> T405
+T405 --> T406
+T406 --> T407
+T407 --> T408
+T408 --> T409
+
+legend right
+  实线箭头：前置依赖（前序交付物被后续任务使用）
+  虚线箭头：变更影响（考勤条目需生成层扩容，非强依赖）
+endlegend
+@enduml

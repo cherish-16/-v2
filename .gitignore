@@ -222,6 +222,15 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
+# superpowers workspace
+.superpowers/
+
+# 本项目：运行时产物
+*.db
+*.db-wal
+*.db-shm
+members.json
+_guide.txt
 # ============================================================
 # 项目补充（智能日报 v2）
 # ============================================================

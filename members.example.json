@@ -1,0 +1,23 @@
+[
+  {
+    "member_id": "m1",
+    "name": "成员一姓名",
+    "github_login": "github-username-1",
+    "feishu_open_id": "",
+    "email": ""
+  },
+  {
+    "member_id": "m2",
+    "name": "成员二姓名",
+    "github_login": "github-username-2",
+    "feishu_open_id": "",
+    "email": ""
+  },
+  {
+    "member_id": "m3",
+    "name": "成员三姓名",
+    "github_login": "github-username-3",
+    "feishu_open_id": "",
+    "email": ""
+  }
+]

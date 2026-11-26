@@ -1,0 +1,51 @@
+@startuml 序列图_推送与运行摘要
+' 系统分析报告 3.4.2 序列图二（PlantUML 序列图）
+' 渲染：java -jar plantuml.jar docs/uml/序列图_推送与运行摘要.puml -tpng -charset UTF-8
+title 智能日报生成器 v2 · 序列图二：推送与运行摘要（双渠道隔离）
+
+autonumber
+skinparam defaultFontSize 12
+skinparam sequenceMessageAlign left
+skinparam ParticipantPadding 8
+
+actor "CLI" as CLI
+participant "run_daily" as RUN
+participant "SmtpEmailPublisher" as MAIL
+participant "WebhookBotPublisher" as BOT
+participant "render/text" as REND
+participant "Repository" as REPO
+
+RUN -> RUN : recipients = 成员邮箱去重（保持声明顺序）
+alt 存在收件人
+  RUN -> MAIL : send_email(team_report, recipients)
+  MAIL -> REND : render_email_html(report)
+  loop 逐封发送（单封失败不中断）
+    MAIL -> MAIL : SMTP_SSL 登录并发送
+    alt 单封失败
+      MAIL -> MAIL : failed += (地址, 异常类型名)\n继续下一封
+    else SMTPAuthenticationError
+      MAIL -> MAIL : 整批停止；其余收件人标记\n"skipped: authentication failed"
+    end
+  end
+  MAIL --> RUN : SendResult(success, failed)
+else 无收件人
+  RUN -> RUN : sent["email"] = 0
+end
+
+opt 配置了飞书机器人且团队日报存在
+  RUN -> BOT : push_to_feishu(team_report)
+  BOT -> REND : render_text(report)
+  BOT -> BOT : POST webhook\n（429 / 5xx 退避重试 ≤ retry_times）
+  BOT --> RUN : PushResult(ok, error)
+end
+
+RUN -> RUN : 状态判定\nsuccess / partial / failed
+RUN -> REPO : save_run_summary(summary)
+RUN --> CLI : RunSummary（终端打印摘要并决定退出码）
+
+note over MAIL, BOT
+  两个渠道各自 try/except 隔离：
+  邮件失败不影响飞书推送，反之亦然；
+  推送全失败时日报正文已在生成阶段入库，不会丢。
+end note
+@enduml
