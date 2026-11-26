@@ -92,3 +92,52 @@ def test_naive_window_rejected():
             datetime(2026, 11, 25),
             UNTIL,
         )
+
+def test_feishu_attendance_maps_status_and_filters_window():
+    """飞书真实状态词（Normal/Late）要映射到我们的词表，且窗口外记录被过滤。"""
+    import httpx
+
+    from daily_report.collectors.feishu import FeishuAttendanceSource
+
+    day_ms = int(SINCE.timestamp() * 1000)
+    in_day = "2026-11-25"
+    prev_day = "2026-11-24"
+
+    def handler(request):
+        if "tenant_access_token" in str(request.url):
+            return httpx.Response(200, json={"code": 0, "tenant_access_token": "t"})
+        assert request.method == "POST", "考勤接口必须用 POST"
+        body = request.read().decode()
+        assert "employeeNos" in body or "user_ids" in body
+        return httpx.Response(
+            200,
+            json={
+                "code": 0,
+                "data": {
+                    "user_task_results": [
+                        {
+                            "result_id": "r1",
+                            "user_id": "u1",
+                            "day": in_day,
+                            "status": "Normal",
+                            "check_in_record": {"time": str(day_ms)},
+                        },
+                        {
+                            "result_id": "r2",
+                            "user_id": "u1",
+                            "day": prev_day,
+                            "status": "Late",
+                            "check_in_record": {"time": str(day_ms - 86400000)},
+                        },
+                    ],
+                    "has_more": False,
+                },
+            },
+        )
+
+    source = FeishuAttendanceSource(
+        httpx.Client(transport=httpx.MockTransport(handler)), "id", "s", user_ids=["u1"]
+    )
+    result = source.collect_attendance(SINCE, UNTIL)
+    assert len(result) == 1, "窗口外的记录必须被过滤"
+    assert result[0].status == "present"

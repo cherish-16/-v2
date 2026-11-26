@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from daily_report.errors import ConfigError
@@ -47,17 +48,46 @@ class Settings:
     max_pages: int = 10
     retry_times: int = 2
     github_owner: str = ""
+    insecure_tls: bool = False
     github_repo: str = ""
     attendance_position: str = "end"
 
 
-def load_settings(env: Mapping[str, str] | None = None) -> Settings:
-    """从环境变量装配配置。``env`` 缺省读 ``os.environ``。
+def _env_file_values(path: str = ".env") -> dict[str, str]:
+    """读取 .env 文件（KEY=VALUE 格式，忽略注释与空行）。
 
-    live 模式下必须提供 GitHub 令牌，否则抛 ConfigError —— 让配置错误在
-    启动时暴露，而不是在采集到一半时。
+    这不是完整的 dotenv 实现，只覆盖本项目需要的子集：
+    不做变量展开、不处理引号包裹的多行值。
     """
-    source: Mapping[str, str] = os.environ if env is None else env
+    target = Path(path)
+    if not target.exists():
+        return {}
+    values: dict[str, str] = {}
+    for line in target.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, _, value = stripped.partition("=")
+        values[key.strip()] = value.strip()
+    return values
+
+
+def load_settings(
+    env: Mapping[str, str] | None = None, *, env_file: str | None = ".env"
+) -> Settings:
+    """从环境变量装配配置。
+
+    优先级：显式传入的 ``env`` > 进程环境变量 > ``.env`` 文件。
+    显式传 ``env``（测试常用）时完全不读 ``.env``，保证测试可隔离。
+    """
+    if env is not None:
+        source: Mapping[str, str] = env
+    else:
+        merged: dict[str, str] = {}
+        if env_file:
+            merged.update(_env_file_values(env_file))
+        merged.update(os.environ)  # 进程环境变量优先于文件
+        source = merged
 
     source_mode = (_read(source, "DAILY_REPORT_SOURCE_MODE") or "mock").lower()
     if source_mode not in VALID_SOURCE_MODES:
@@ -90,6 +120,8 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         smtp_password=_read(source, "SMTP_PASSWORD"),
         feishu_bot_webhook=_read(source, "FEISHU_BOT_WEBHOOK"),
         github_owner=_read(source, "GITHUB_OWNER") or "",
+        insecure_tls=(_read(source, "DAILY_REPORT_INSECURE_TLS") or "").lower()
+        in ("1", "true", "yes"),
         github_repo=_read(source, "GITHUB_REPO") or "",
         max_pages=_read_int(source, "DAILY_REPORT_MAX_PAGES", 10),
         retry_times=_read_int(source, "DAILY_REPORT_RETRY_TIMES", 2),

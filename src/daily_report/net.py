@@ -98,6 +98,7 @@ def post_json(
     url: str,
     *,
     json_body: Any,
+    params: Mapping[str, Any] | None = None,
     headers: Mapping[str, str] | None = None,
     retry_times: int = 2,
     sleep: Callable[[float], None] = time.sleep,
@@ -105,7 +106,11 @@ def post_json(
     """POST 并解析 JSON。失败语义同 :func:`get_json`。"""
     response = _request_with_retry(
         lambda: client.post(
-            url, json=json_body, headers=_headers(headers), timeout=DEFAULT_TIMEOUT
+            url,
+            params=params,
+            json=json_body,
+            headers=_headers(headers),
+            timeout=DEFAULT_TIMEOUT,
         ),
         retry_times=retry_times,
         sleep=sleep,

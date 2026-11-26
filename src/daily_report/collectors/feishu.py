@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import warnings
+from collections.abc import Sequence
 from datetime import UTC, date, datetime
 
 import httpx
@@ -191,8 +192,31 @@ class FeishuMessageSource(_FeishuBase):
             is_recalled=bool(item.get("deleted", False)),
         )
 
+def _record_moment(record: AttendanceRecord) -> datetime:
+    """考勤记录的时间基准：优先打卡时间，否则用工作日的 UTC 零点。"""
+    if record.checked_in_at is not None:
+        return record.checked_in_at
+    return datetime.combine(record.work_date, datetime.min.time(), tzinfo=UTC)
+
+
 class FeishuAttendanceSource(_FeishuBase):
-    """考勤采集（v1.1 变更，见 design.md §3.6 / ADR-005）。"""
+    """考勤采集（v1.1 变更，见 design.md §3.6 / ADR-005）。
+
+    飞书考勤接口要求显式给出要查询的人员列表（``user_ids``）和人员 ID 类型
+    （``employee_type``）。空列表会返回 1220001，因此调用方必须提供成员。
+    """
+
+    def __init__(
+        self,
+        client: httpx.Client,
+        app_id: str,
+        app_secret: str,
+        user_ids: Sequence[str] = (),
+        employee_type: str = "employee_id",
+    ) -> None:
+        super().__init__(client, app_id, app_secret)
+        self._user_ids = tuple(user_ids)
+        self._employee_type = employee_type
 
     def collect_attendance(
         self, since: datetime, until: datetime
@@ -206,15 +230,20 @@ class FeishuAttendanceSource(_FeishuBase):
         page_token: str | None = None
         for _ in range(MAX_PAGES):
             params: dict[str, str] = {
-                "check_date_from": start.date().isoformat(),
-                "check_date_to": end.date().isoformat(),
+                "employee_type": self._employee_type,
                 "page_size": "50",
             }
             if page_token:
                 params["page_token"] = page_token
-            data = get_json(
+            # 该接口是 POST，日期用秒级时间戳，用户列表字段名是 employeeNos。
+            data = post_json(
                 self._client,
                 f"{API_BASE}/attendance/v1/user_tasks/query",
+                json_body={
+                    "user_ids": list(self._user_ids),
+                    "check_date_from": int(start.timestamp()),
+                    "check_date_to": int(end.timestamp()),
+                },
                 params=params,
                 headers=self._auth_headers(),
             )
@@ -225,17 +254,33 @@ class FeishuAttendanceSource(_FeishuBase):
             if not payload.get("has_more"):
                 break
             page_token = payload.get("page_token")
-        return records
+        # 服务端按日闭区间返回，这里再按 [start, end) 过滤一次，
+        # 防止前一天/后一天的记录串进来。
+        return [r for r in records if start <= _record_moment(r) < end]
 
-    @staticmethod
-    def _to_record(item: dict) -> AttendanceRecord:
+    #: 飞书考勤状态词表 → 我们的领域词表。未知值降级为 present，
+    #: 避免一个陌生状态码让整个来源失败。
+    _STATUS_MAP = {
+        "Normal": "present",
+        "SystemCheck": "present",
+        "Lack": "absent",
+        "Late": "late",
+        "Leave": "leave",
+        "SickLeave": "leave",
+        "AnnualLeave": "leave",
+        "PersonalLeave": "leave",
+    }
+
+    @classmethod
+    def _to_record(cls, item: dict) -> AttendanceRecord:
         check_in = item.get("check_in_record") or {}
         check_out = item.get("check_out_record") or {}
+        raw_status = item.get("status") or "present"
         return AttendanceRecord(
-            record_id=item["result_id"],
+            record_id=item.get("result_id") or item.get("user_id") or "unknown",
             member_open_id=item.get("user_id"),
-            work_date=date.fromisoformat(item["day"]),
-            status=item.get("status", "present"),
+            work_date=date.fromisoformat(item.get("day", "1970-01-01")),
+            status=cls._STATUS_MAP.get(raw_status, "present"),
             checked_in_at=(
                 _epoch_ms_to_utc(check_in["time"]) if check_in.get("time") else None
             ),

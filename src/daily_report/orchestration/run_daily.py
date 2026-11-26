@@ -175,7 +175,8 @@ def run_daily(
     email_ok = bot_ok = False
     had_channels = False
 
-    recipients = [m.email for m in members if m.email]
+    # 去重并保持稳定顺序：同一地址只发一次，避免一人配置多条成员记录导致重复收信。
+    recipients = list(dict.fromkeys(m.email for m in members if m.email))
     if recipients:
         had_channels = True
         try:

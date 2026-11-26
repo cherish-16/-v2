@@ -110,7 +110,7 @@ def _build_sources(settings: Settings, demo: bool = False) -> SourceBundle:
     if settings.source_mode == "mock" or demo:
         return MockSourceBundle() if not demo else _demo_bundle()
 
-    client = httpx.Client()
+    client = httpx.Client(verify=not settings.insecure_tls)
     return SourceBundle(
         commit_source=GitHubCommitSource(client, settings.github_token or ""),
         task_source=FeishuTaskSource(
@@ -126,7 +126,8 @@ def _build_publishers(settings: Settings) -> PublisherBundle:
     bot = None
     if settings.feishu_bot_webhook:
         bot = WebhookBotPublisher(
-            httpx.Client(), webhook=settings.feishu_bot_webhook
+            httpx.Client(verify=not settings.insecure_tls),
+            webhook=settings.feishu_bot_webhook,
         )
     return PublisherBundle(email=SmtpEmailPublisher(settings), bot=bot)
 
@@ -283,13 +284,24 @@ def _demo_bundle():
     return MockSourceBundle(**records)
 
 
+def _demo_email() -> str:
+    """演示模式的收件地址：显式环境变量优先，其次读 .env。"""
+    import os
+
+    explicit = os.environ.get("DAILY_REPORT_DEMO_EMAIL")
+    if explicit is not None:
+        return explicit
+    from daily_report.config import _env_file_values
+
+    return _env_file_values(".env").get("DAILY_REPORT_DEMO_EMAIL", "")
+
 DEMO_MEMBERS = [
     {"member_id": "m1", "name": "张三", "github_login": "zhangsan",
-     "feishu_open_id": "ou_zhangsan", "email": ""},
+     "feishu_open_id": "ou_zhangsan", "email": _demo_email()},
     {"member_id": "m2", "name": "李四", "github_login": "lisi",
-     "feishu_open_id": "ou_lisi", "email": ""},
+     "feishu_open_id": "ou_lisi", "email": _demo_email()},
     {"member_id": "m3", "name": "王五", "github_login": "wangwu",
-     "feishu_open_id": "ou_wangwu", "email": ""},
+     "feishu_open_id": "ou_wangwu", "email": _demo_email()},
 ]
 
 
