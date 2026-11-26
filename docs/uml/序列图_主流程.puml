@@ -1,0 +1,44 @@
+@startuml 序列图_主流程
+' 系统分析报告 3.4.1 序列图一（PlantUML 序列图）
+' 渲染：java -jar plantuml.jar docs/uml/序列图_主流程.puml -tpng -charset UTF-8
+title 智能日报生成器 v2 · 序列图一：run_daily 主流程
+
+autonumber
+skinparam defaultFontSize 12
+skinparam sequenceMessageAlign left
+skinparam ParticipantPadding 8
+
+actor "CLI" as CLI
+participant "run_daily\n(orchestration)" as RUN
+participant "Repository\n(storage)" as REPO
+participant "采集端口\n(SourceBundle)" as SRC
+participant "builder\n(generation)" as BUILD
+participant "attribution\n(generation)" as ATTR
+
+CLI -> RUN : run_daily(team_id, report_date, force=False)
+RUN -> REPO : find_latest_run(team_id, report_date)
+REPO --> RUN : RunSummary | None
+alt 已有 success / partial 且未 force
+  RUN --> CLI : status=skipped 摘要（不采集、不推送）
+else 未运行过，或 force=True
+  RUN -> RUN : _day_window(date, tz)\n团队时区当天 → UTC [start, end)
+  group 逐源采集（每个源独立 try/except）
+    RUN -> SRC : collect_commits / collect_tasks / collect_messages
+    RUN -> SRC : (可选) collect_attendance
+    SRC --> RUN : list[Record]；异常 → failed[src] = 异常类型名
+    RUN -> REPO : save_commits / save_tasks / save_messages\n（INSERT OR IGNORE 去重）
+  end
+  RUN -> REPO : list_members()
+  REPO --> RUN : list[Member]；为空 → failed["members"]
+  loop 每位成员（单人失败不拖垮整批）
+    RUN -> BUILD : generate_report(PERSONAL, member_id, 4 类记录)
+    BUILD -> ATTR : attribute(members, records)
+    ATTR --> BUILD : AttributionResult\n（unmapped / mapping_gaps）
+    BUILD --> RUN : DailyReport；异常 → failed[personal:id]
+    RUN -> REPO : save_report(report)（降级保护 upsert）
+  end
+  RUN -> BUILD : generate_report(TEAM, team_id, ...)
+  BUILD --> RUN : 团队 DailyReport
+  RUN -> REPO : save_report(team_report)
+end
+@enduml

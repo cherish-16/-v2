@@ -1,0 +1,51 @@
+@startuml 端口适配器类图_推送
+' 系统分析报告 3.2 端口与适配器类图（二）推送侧（PlantUML 类图）
+' 渲染：java -jar plantuml.jar docs/uml/端口适配器类图_推送.puml -tpng -charset UTF-8
+title 智能日报生成器 v2 · 推送端口与适配器
+
+skinparam classAttributeIconSize 0
+hide circle
+skinparam class {
+  BackgroundColor #F7F9FC
+  BorderColor #5A6B8C
+}
+skinparam interface {
+  BackgroundColor #FFF6DA
+  BorderColor #5A6B8C
+}
+skinparam ArrowColor #5A6B8C
+
+interface EmailPublisher <<Protocol · runtime_checkable>> {
+  send_email(report, recipients) : SendResult
+}
+interface BotPublisher <<Protocol · runtime_checkable>> {
+  push_to_feishu(report, webhook=None) : PushResult
+}
+
+class SmtpEmailPublisher <<适配器>>
+class WebhookBotPublisher <<适配器>>
+class FakePublisher <<测试替身 · fail_email=False, fail_bot=False>>
+
+class SendResult {
+  success : list[str]
+  failed : list[tuple[str, str]]
+  ok : bool «property»
+}
+class PushResult {
+  ok : bool
+  error : str | None
+}
+
+EmailPublisher <|.. SmtpEmailPublisher
+EmailPublisher <|.. FakePublisher
+BotPublisher <|.. WebhookBotPublisher
+BotPublisher <|.. FakePublisher
+
+EmailPublisher ..> SendResult : 返回
+BotPublisher ..> PushResult : 返回
+
+note right of FakePublisher
+  同时实现两个端口，可注入渠道失败，
+  供失败隔离用例使用。
+end note
+@enduml

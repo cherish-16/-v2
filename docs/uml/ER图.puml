@@ -1,0 +1,106 @@
+@startuml ER图
+' 系统分析报告 4.1 概念模型与 ER 图（PlantUML IE 记法）
+' 渲染：java -jar plantuml.jar docs/uml/ER图.puml -tpng -charset UTF-8
+title 智能日报生成器 v2 · 概念模型 ER 图
+
+hide circle
+skinparam linetype ortho
+skinparam defaultFontSize 11
+skinparam entity {
+  BackgroundColor #F7F9FC
+  BorderColor #5A6B8C
+}
+skinparam ArrowColor #5A6B8C
+
+entity "members" as members {
+  * member_id : TEXT <<PK>>
+  --
+  * name : TEXT <<NOT NULL>>
+  github_login : TEXT
+  feishu_open_id : TEXT
+  email : TEXT
+  git_emails : TEXT «JSON 数组»
+}
+
+entity "commit_records" as commits {
+  * sha : TEXT <<PK>>
+  --
+  * author_login : TEXT <<NOT NULL>>
+  * message : TEXT <<NOT NULL>>
+  * committed_at : TEXT <<NOT NULL · UTC>>
+  * repo : TEXT <<NOT NULL>>
+  author_email : TEXT
+}
+
+entity "task_records" as tasks {
+  * task_id : TEXT <<PK>>
+  --
+  * title : TEXT <<NOT NULL>>
+  * status : TEXT <<NOT NULL>>
+  assignee_open_id : TEXT
+  * updated_at : TEXT <<NOT NULL>>
+}
+
+entity "message_records" as messages {
+  * msg_id : TEXT <<PK>>
+  --
+  sender_open_id : TEXT
+  * content : TEXT <<NOT NULL>>
+  * created_at : TEXT <<NOT NULL>>
+  * chat_id : TEXT <<NOT NULL>>
+  * is_recalled : INTEGER <<默认 0>>
+}
+
+entity "daily_reports" as reports {
+  * id : INTEGER <<PK · AUTOINCREMENT>>
+  --
+  * scope : TEXT <<NOT NULL>>
+  * entity_id : TEXT <<NOT NULL>>
+  * report_date : TEXT <<NOT NULL>>
+  * generated_at : TEXT <<NOT NULL>>
+  * body_json : TEXT <<NOT NULL>>
+  note : TEXT
+}
+
+entity "run_summaries" as runs {
+  * id : INTEGER <<PK · AUTOINCREMENT>>
+  --
+  * team_id : TEXT <<NOT NULL>>
+  * run_date : TEXT <<NOT NULL>>
+  * status : TEXT <<NOT NULL>>
+  * collected_json : TEXT <<NOT NULL>>
+  * sent_json : TEXT <<NOT NULL>>
+  * failed_json : TEXT <<NOT NULL>>
+  * started_at : TEXT <<NOT NULL>>
+  finished_at : TEXT
+}
+
+members ||..o{ commits
+members ||..o{ tasks
+members ||..o{ messages
+
+note as N_FK
+  members 与三类原始记录之间是「账号映射」逻辑归属（非外键）：
+  commit_records 按 github_login / git_emails 匹配，
+  task_records / message_records 按 feishu_open_id 匹配。
+  刻意不建外键：归属运算在生成层 attribution 完成，
+  成员映射随时可补配并重新生成日报。
+end note
+
+note right of reports
+  UNIQUE(scope, entity_id, report_date)；
+  upsert 带降级保护：新报告条目数
+  不少于已存报告才允许覆盖。
+end note
+
+note right of runs
+  部分唯一索引 idx_run_productive_unique
+  (team_id, run_date) WHERE status IN ('success','partial')
+end note
+
+note bottom of messages
+  考勤记录（AttendanceRecord）当日采集后直接参与生成，不落库：
+  飞书侧为权威数据源，重复查询幂等（v1.1 范围决策）。
+  原始记录表全部只追加、按主键 INSERT OR IGNORE 去重。
+end note
+@enduml

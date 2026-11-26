@@ -1,0 +1,73 @@
+@startuml 端口适配器类图_采集
+' 系统分析报告 3.2 端口与适配器类图（一）采集侧（PlantUML 类图）
+' 渲染：java -jar plantuml.jar docs/uml/端口适配器类图_采集.puml -tpng -charset UTF-8
+title 智能日报生成器 v2 · 采集端口与适配器
+
+skinparam classAttributeIconSize 0
+hide circle
+skinparam class {
+  BackgroundColor #F7F9FC
+  BorderColor #5A6B8C
+}
+skinparam interface {
+  BackgroundColor #FFF6DA
+  BorderColor #5A6B8C
+}
+skinparam ArrowColor #5A6B8C
+left to right direction
+skinparam nodesep 30
+skinparam ranksep 35
+
+class SourceBundle {
+  commit_source : CommitSource
+  task_source : TaskSource
+  message_source : MessageSource
+  attendance_source : AttendanceSource | None = None
+}
+
+interface CommitSource <<Protocol · runtime_checkable>> {
+  collect_commits(owner, repo, since, until, *, max_pages=10) : list[CommitRecord]
+}
+interface TaskSource <<Protocol · runtime_checkable>> {
+  collect_tasks(since, until) : list[TaskRecord]
+}
+interface MessageSource <<Protocol · runtime_checkable>> {
+  collect_messages(since, until) : list[MessageRecord]
+}
+interface AttendanceSource <<Protocol · runtime_checkable>> {
+  collect_attendance(since, until) : list[AttendanceRecord]
+}
+
+class GitHubCommitSource <<适配器>>
+class MockCommitSource <<测试替身>>
+class FeishuTaskSource <<适配器>>
+class MockTaskSource <<测试替身>>
+class FeishuMessageSource <<适配器>>
+class MockMessageSource <<测试替身>>
+class FeishuAttendanceSource <<适配器>>
+class MockAttendanceSource <<测试替身>>
+
+SourceBundle --> CommitSource : 调用
+SourceBundle --> TaskSource : 调用
+SourceBundle --> MessageSource : 调用
+SourceBundle --> AttendanceSource : 可选
+
+CommitSource <|.. GitHubCommitSource
+CommitSource <|.. MockCommitSource
+TaskSource <|.. FeishuTaskSource
+TaskSource <|.. MockTaskSource
+MessageSource <|.. FeishuMessageSource
+MessageSource <|.. MockMessageSource
+AttendanceSource <|.. FeishuAttendanceSource
+AttendanceSource <|.. MockAttendanceSource
+
+note right of AttendanceSource
+  attendance_source 为可选字段：未配置时整段采集跳过，
+  行为与 v1.1 变更前完全一致（ADR-005）。
+end note
+
+note bottom of SourceBundle
+  编排层只依赖 SourceBundle 与端口，不认识具体数据源；
+  Mock 实现与真实实现同契约，窗口过滤语义一致。
+end note
+@enduml

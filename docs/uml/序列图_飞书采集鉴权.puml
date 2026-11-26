@@ -1,0 +1,41 @@
+@startuml 序列图_飞书采集鉴权
+' 系统分析报告 3.4.3 序列图三（PlantUML 序列图）
+' 渲染：java -jar plantuml.jar docs/uml/序列图_飞书采集鉴权.puml -tpng -charset UTF-8
+title 智能日报生成器 v2 · 序列图三：飞书采集的鉴权与重试
+
+autonumber
+skinparam defaultFontSize 12
+skinparam sequenceMessageAlign left
+skinparam ParticipantPadding 8
+
+participant "FeishuXxxSource\n(任务 / 消息 / 考勤)" as SRC
+participant "_FeishuBase\n(token 缓存)" as BASE
+participant "net\n(get_json / post_json)" as NET
+participant "飞书开放平台" as API
+
+SRC -> BASE : _auth_headers()
+BASE -> BASE : _tenant_token()\n已有缓存 → 直接复用
+opt 缓存为空
+  BASE -> NET : post_json(/auth/v3/tenant_access_token/internal)
+  NET -> API : POST app_id + app_secret
+  API --> NET : tenant_access_token
+  NET --> BASE : token；缺失 → AuthenticationError
+  BASE -> BASE : 写入缓存
+end
+BASE --> SRC : Authorization: Bearer <token>
+
+SRC -> NET : get_json(业务接口, headers=..., params=...)
+NET -> API : GET（统一超时 10s）
+API --> NET : HTTP 响应
+alt 401 / 403
+  NET --> SRC : 抛 AuthenticationError（不重试）
+else 429 / 5xx / 超时 / 传输错误
+  NET -> NET : 退避 1s、2s 重试\n（总尝试次数 ≤ retry_times + 1）
+  NET --> SRC : 耗尽后抛 TransientError
+else 其它 4xx
+  NET --> SRC : 抛 TransientError（重发不会有不同结果）
+else 2xx
+  NET --> SRC : JSON 响应
+  SRC -> SRC : 转 list[Record]\n（飞书 epoch ms → UTC aware）
+end
+@enduml

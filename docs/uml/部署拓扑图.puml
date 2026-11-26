@@ -1,0 +1,35 @@
+@startuml 部署拓扑图
+' 系统设计报告 3.3.3 部署拓扑（PlantUML 部署图）
+' 渲染：java -jar plantuml.jar docs/uml/部署拓扑图.puml -tpng -charset UTF-8
+title 智能日报生成器 v2 · 部署拓扑
+
+skinparam defaultFontSize 12
+skinparam componentStyle rectangle
+skinparam node {
+  BackgroundColor #F7F9FC
+  BorderColor #5A6B8C
+}
+
+node "运行主机\nWindows 10/11 或 Linux / macOS" as Host {
+  artifact "系统计划任务\n每天 18:00" as Cron
+  artifact "推送日报.bat\n(Windows 一键运行)" as Bat
+  component "daily_report CLI\npython -m daily_report\n(uv 虚拟环境 · Python ≥ 3.12)" as CLI
+  database "SQLite 文件\ndaily_report.db\n原始记录 / 日报 / RunSummary" as DB
+  file ".env / 进程环境变量\n密钥配置（config.py 唯一读取点）" as ENV
+}
+
+cloud "GitHub API" as GH
+cloud "飞书开放平台\n任务 / 消息 / 考勤" as FS
+cloud "SMTP 邮件服务器" as SMTP
+cloud "飞书群机器人 Webhook" as Hook
+
+Cron --> Bat : 调用
+Cron --> CLI
+Bat --> CLI
+CLI ..> ENV : 读取密钥
+CLI --> DB : 读写（参数化 SQL）
+CLI --> GH : HTTPS + 只读令牌
+CLI --> FS : HTTPS + 应用凭证
+CLI --> SMTP : SMTP_SSL 465
+CLI --> Hook : HTTPS POST
+@enduml

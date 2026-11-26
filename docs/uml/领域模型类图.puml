@@ -1,0 +1,100 @@
+@startuml 领域模型类图
+' 系统分析报告 3.1 领域模型类图（PlantUML 类图）
+' 渲染：java -jar plantuml.jar docs/uml/领域模型类图.puml -tpng -charset UTF-8
+title 智能日报生成器 v2 · 领域模型类图
+
+skinparam classAttributeIconSize 0
+hide circle
+skinparam class {
+  BackgroundColor #F7F9FC
+  BorderColor #5A6B8C
+}
+skinparam ArrowColor #5A6B8C
+
+class Member <<frozen dataclass>> {
+  +member_id : str
+  +name : str
+  +github_login : str | None
+  +feishu_open_id : str | None
+  +email : str | None
+  +git_emails : tuple[str, ...]
+}
+
+class CommitRecord <<frozen dataclass>> {
+  +sha : str
+  +author_login : str
+  +message : str
+  +committed_at : datetime «UTC»
+  +repo : str
+  +author_email : str | None
+}
+
+class TaskRecord <<frozen dataclass>> {
+  +task_id : str
+  +title : str
+  +status : str
+  +assignee_open_id : str | None
+  +updated_at : datetime «UTC»
+}
+
+class MessageRecord <<frozen dataclass>> {
+  +msg_id : str
+  +sender_open_id : str | None
+  +content : str
+  +created_at : datetime «UTC»
+  +chat_id : str
+  +is_recalled : bool = False
+}
+
+class AttendanceRecord <<frozen dataclass · v1.1>> {
+  +record_id : str
+  +member_open_id : str | None
+  +work_date : date
+  +status : str «present / absent / late / leave»
+  +checked_in_at : datetime | None
+  +checked_out_at : datetime | None
+}
+
+class ReportItem <<frozen dataclass>> {
+  +source_type : str
+  +source_id : str
+  +text : str
+  +occurred_at : datetime «UTC»
+}
+
+class DailyReport {
+  +scope : ReportScope
+  +entity_id : str
+  +report_date : date
+  +items : list[ReportItem]
+  +generated_at : datetime «UTC»
+  +note : str | None
+}
+
+class RunSummary {
+  +team_id : str
+  +run_date : date
+  +status : str «success / skipped / partial / failed»
+  +collected : dict
+  +sent : dict
+  +failed : dict
+  +started_at : datetime «UTC»
+  +finished_at : datetime | None
+}
+
+enum ReportScope {
+  PERSONAL
+  TEAM
+}
+
+DailyReport "1" *-- "0..*" ReportItem : items
+DailyReport --> ReportScope : scope
+
+note as N_MODELS
+  · 除 DailyReport / RunSummary 外均为 frozen dataclass；
+  · 所有 datetime 在 __post_init__ 中经 ensure_utc() 归一为 UTC，
+    naive datetime 直接抛 ValueError；
+  · ReportItem.source_id 为空即抛 ValueError（构造期强制可追溯）；
+  · 记录类不持有 Member 引用，归属由生成层 attribution 按账号映射完成。
+end note
+@enduml

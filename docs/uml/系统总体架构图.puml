@@ -1,0 +1,70 @@
+@startuml 系统总体架构图
+' 系统分析报告 2.1 四层总体结构（PlantUML 组件图）
+' 渲染：java -jar plantuml.jar docs/uml/系统总体架构图.puml -tpng -charset UTF-8
+title 智能日报生成器 v2 · 四层总体架构
+
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+skinparam defaultFontSize 12
+skinparam ArrowColor #5A6B8C
+skinparam linetype ortho
+top to bottom direction
+
+package "主编排入口层" as ORCH {
+  [cli.py\n参数解析 · 退出码] as CLI
+  [orchestration/run_daily.py\n幂等 · 失败隔离 · RunSummary] as RUN
+}
+
+package "采集层 collectors/" as COLLECT {
+  [base.py\n四个采集端口] as CBASE
+  [github.py\nGitHub 提交] as GH
+  [feishu.py\n任务 / 消息 / 考勤] as FS
+  [mock.py\n离线数据源] as MOCK
+}
+
+package "生成层 generation/ · render/" as GEN {
+  [attribution.py\n原始记录 → 成员归组] as ATTR
+  [builder.py\n个人 / 团队日报] as BUILD
+  [render/text.py\n纯文本 / HTML] as REND
+}
+
+package "推送层 publishers/" as PUB {
+  [base.py\n推送端口与结果类型] as PBASE
+  [email.py\nSMTP_SSL] as MAIL
+  [feishu_bot.py\n群机器人 webhook] as BOT
+  [fake.py\n可注入失败的测试替身] as FAKE
+}
+
+package "共享基础层" as CORE {
+  [models.py\n领域模型] as MODELS
+  [errors.py\n异常体系] as ERRORS
+  [config.py\n配置（密钥唯一读取点）] as CONFIG
+  [net.py\n超时与重试] as NET
+  [storage/\nschema · repository] as STORAGE
+}
+
+CLI --> RUN : run_daily()
+
+ORCH --> COLLECT : 采集
+ORCH --> GEN : 生成
+ORCH --> PUB : 推送
+ORCH ..> CORE : 依赖
+COLLECT ..> CORE : 只依赖
+GEN ..> CORE : 只依赖
+PUB ..> CORE : 只依赖
+
+GH ..|> CBASE
+FS ..|> CBASE
+MOCK ..|> CBASE
+BUILD --> ATTR : attribute()
+MAIL ..|> PBASE
+BOT ..|> PBASE
+FAKE ..|> PBASE
+
+note bottom of CORE
+  依赖方向由 tests/test_architecture.py 守护：
+  采集 / 生成 / 渲染 / 推送 / 存储 / 网络模块
+  一律禁止 import orchestration，只有编排层可反向调用；
+  推送层调用 render/ 生成投递文本，不自行拼装内容。
+end note
+@enduml

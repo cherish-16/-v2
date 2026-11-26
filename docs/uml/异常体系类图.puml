@@ -1,0 +1,52 @@
+@startuml 异常体系类图
+' 系统分析报告 3.3 异常体系类图（PlantUML 类图）
+' 渲染：java -jar plantuml.jar docs/uml/异常体系类图.puml -tpng -charset UTF-8
+title 智能日报生成器 v2 · 异常体系类图
+
+skinparam classAttributeIconSize 0
+hide circle
+skinparam class {
+  BackgroundColor #F7F9FC
+  BorderColor #5A6B8C
+}
+skinparam ArrowColor #5A6B8C
+
+class ReportError {
+  +code : str = "E-REPORT"
+}
+
+class ConfigError {
+  +code : str = "E-CONFIG"
+}
+
+class AuthenticationError {
+  +code : str = "E-AUTH"
+}
+
+class TransientError {
+  +code : str = "E-TRANSIENT"
+}
+
+class TraceabilityError {
+  +code : str = "E-TRACE"
+}
+
+class MemberFileError <<members.py · 独立体系>> {
+  成员 JSON 文件校验失败
+}
+
+ReportError <|-- ConfigError
+ReportError <|-- AuthenticationError
+ReportError <|-- TransientError
+ReportError <|-- TraceabilityError
+
+note bottom of ReportError
+  本层只定义类型与错误码，不含处理策略；
+  采集层 / 推送层的异常由编排层逐源、逐渠道隔离。
+end note
+
+note right of MemberFileError
+  不属于 ReportError 体系：成员文件在编排开始前
+  即可独立校验，由 CLI 层单独处理并以退出码 1 结束。
+end note
+@enduml
