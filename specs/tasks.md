@@ -3,7 +3,7 @@
 | 项 | 内容 |
 |---|---|
 | 关联规范 | `specs/proposal.md`、`specs/design.md` |
-| 版本 | v2.0 |
+| 版本 | v2.1（含变更单 CR-2026-11-25-01：新增 T4-01~T4-05，T3-10/T3-11 标记受影响） |
 | 纪律 | 一任务 = 一交付物 = 一次提交 = 一次 code-review |
 
 > 提交信息格式：`feat|fix|test|docs|chore: [任务编号] 一句话说明`
@@ -59,14 +59,14 @@
 | 编号 | 任务 | 交付物 | 验收标准（可执行） | 依赖 | 提交 | 状态 |
 |---|---|---|---|---|---|---|
 | T4-01 | 变更单受理与规范同步 | `proposal.md` 新增 R-11、`design.md` 新增 3.6 接口契约与 ADR-005 | 文档 diff 中可看到范围、接口、数据模型三处同步；`docs/变更涟漪演练记录.md` 记录变更单原文与影响面 | T3-18 | 4cfd33c | DONE |
-| T4-02 | 任务与依赖更新 | `tasks.md` 新增 T4-03~T4-05 并更新依赖图 | 新增任务均有验收标准；依赖图中 `affected` 标记指向被修改的 T3-09/T3-10 | T4-01 | — | DONE |
+| T4-02 | 任务与依赖更新 | `tasks.md` 新增 T4-03~T4-05 并更新依赖图 | 新增任务均有验收标准；依赖图中 `affected` 标记指向被修改的 T3-09/T3-10 | T4-01 | 4cfd33c | DONE |
 | T4-03 | 考勤采集实现 | `models.AttendanceRecord`、`collectors/feishu.py` 新增 `collect_attendance`、`collectors/mock.py` 同步 | `pytest tests/test_attendance.py` 通过：区间采集、缺勤记录、空区间返回 `[]` | T4-02 | d3e3bca | DONE |
 | T4-04 | 生成层容纳考勤条目 | `generation/builder.py` 接入考勤来源 | `pytest tests/test_builder_team.py` 新增用例通过：考勤条目按配置位置插入；`source_id` 可追溯 | T4-03 | 3bbdb32 | DONE |
 | T4-05 | 全量回归 | `tests/test_regression.py` | 从 `proposal.md` 成功标准逐条导出用例；`pytest -q` 全绿；`docs/回归测试执行报告.md` 逐条核对通过 | T4-04 | c0c3287 | DONE |
 | T4-06 | 规范守护自检 | `scripts/check_spec_drift.py` 或 git hook | 修改 `src/` 而未修改 `specs/` 时脚本退出码非 0 并列出文件；`docs/规范守护自检记录.md` 有真实运行输出 | T4-05 | 1a4d11a | DONE |
 | T4-07 | 安全自检 | 检索报告 | 全仓检索无令牌明文、无字符串拼接 SQL；日志脱敏用例通过；`docs/安全自检记录.md` 附检索命令与输出 | T4-06 | 9bc02b7 | DONE |
 | T4-08 | 答辩追问清单与模拟答辩 | `docs/答辩追问清单.md`、`docs/模拟答辩记录.md` | 追问覆盖架构 ADR、安全、异常处理、并发与幂等四类，每问有可核对答案 | T4-07 | 9bc02b7 | DONE |
-| T4-09 | 总结与审计报告 | `docs/项目总结报告.md`、`docs/规范审计报告.md`、`docs/AI使用合规声明.md` | 质量数据均来自真实 `pytest --cov` 与 `ruff` 输出；两阶段对比数据标注来源；无编造数据 | T4-08 | — | DONE |
+| T4-09 | 总结与审计报告 | `docs/项目总结报告.md`、`docs/规范审计报告.md`、`docs/AI使用合规声明.md` | 质量数据均来自真实 `pytest --cov` 与 `ruff` 输出；两阶段对比数据标注来源；无编造数据 | T4-08 | 9db2092 | DONE |
 
 ## 3. 依赖图
 
@@ -121,14 +121,14 @@ graph LR
 
 | 范围条目 | 承接任务 | 状态 |
 |---|---|---|
-| R-01 GitHub 采集 | T3-07 | TODO |
-| R-02 飞书任务采集 | T3-08 | TODO |
-| R-03 飞书消息采集 | T3-08 | TODO |
-| R-04 个人日报 | T3-10 | TODO |
-| R-05 团队日报 | T3-11 | TODO |
-| R-06 邮件推送 | T3-13 | TODO |
-| R-07 飞书机器人推送 | T3-14 | TODO |
-| R-08 历史存储与查询 | T3-04、T3-15 | TODO |
-| R-09 映射配置 | T3-03、T3-08 | TODO |
-| R-10 定时与幂等 | T3-15、T3-16 | TODO |
-| R-11 考勤采集（第 4 周变更） | T4-03、T4-04 | TODO |
+| R-01 GitHub 采集 | T3-07 | DONE |
+| R-02 飞书任务采集 | T3-08 | DONE |
+| R-03 飞书消息采集 | T3-08 | DONE |
+| R-04 个人日报 | T3-10 | DONE |
+| R-05 团队日报 | T3-11 | DONE |
+| R-06 邮件推送 | T3-13 | DONE |
+| R-07 飞书机器人推送 | T3-14 | DONE |
+| R-08 历史存储与查询 | T3-04、T3-15 | DONE |
+| R-09 映射配置 | T3-03、T3-08 | DONE |
+| R-10 定时与幂等 | T3-15、T3-16 | DONE |
+| R-11 考勤采集（第 4 周变更） | T4-03、T4-04 | DONE |
