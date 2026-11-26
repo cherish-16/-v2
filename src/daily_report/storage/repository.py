@@ -226,6 +226,12 @@ class Repository:
     # ---------- 运行摘要 ----------
 
     def save_run_summary(self, summary: RunSummary) -> None:
+        # 幂等索引是「部分唯一索引」（只看 success/partial），
+        # ON CONFLICT 无法定位它，因此先删同键旧行再插入。
+        self._conn.execute(
+            "DELETE FROM run_summaries WHERE team_id=? AND run_date=?",
+            (summary.team_id, summary.run_date.isoformat()),
+        )
         self._conn.execute(
             """
             INSERT INTO run_summaries

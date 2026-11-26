@@ -66,6 +66,8 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     run.add_argument("--print", dest="print_report", action="store_true",
                      help="在终端打印日报正文")
+    run.add_argument("--force", action="store_true",
+                     help="强制重跑并重新推送（忽略当天的幂等记录）")
     run.add_argument("--demo", action="store_true",
                      help="使用内置演示数据（无需任何外部凭证）")
     run.add_argument("--db", default="daily_report.db", help="SQLite 文件路径")
@@ -169,6 +171,7 @@ def main(argv: list[str] | None = None) -> int:
             repo=repo,
             sources=_build_sources(settings, demo=args.demo),
             publishers=_build_publishers(settings),
+            force=args.force,
         )
     except ReportError as exc:
         print(f"{exc.code}: {exc}", file=sys.stderr)
@@ -295,7 +298,7 @@ def _demo_email() -> str:
         return explicit
     from daily_report.config import _env_file_values
 
-    return _env_file_values(".env").get("DAILY_REPORT_DEMO_EMAIL", "")
+    return _env_file_values().get("DAILY_REPORT_DEMO_EMAIL", "")
 
 DEMO_MEMBERS = [
     {"member_id": "m1", "name": "张三", "github_login": "zhangsan",

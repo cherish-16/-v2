@@ -54,14 +54,30 @@ class Settings:
     attendance_position: str = "end"
 
 
-def _env_file_values(path: str = ".env") -> dict[str, str]:
+def _default_env_path() -> Path | None:
+    """按优先级找 .env：当前目录 → 项目根目录（包所在目录的上两级）。
+
+    定时任务、双击 bat、从别处启动时工作目录往往不是项目根，
+    只看当前目录会让配置凭空消失。
+    """
+    cwd_candidate = Path.cwd() / ".env"
+    if cwd_candidate.exists():
+        return cwd_candidate
+    project_root = Path(__file__).resolve().parents[2] / ".env"
+    if project_root.exists():
+        return project_root
+    return None
+
+
+def _env_file_values(path: str | None = None) -> dict[str, str]:
     """读取 .env 文件（KEY=VALUE 格式，忽略注释与空行）。
 
+    ``path`` 为 None 时自动查找（见 :func:`_default_env_path`）。
     这不是完整的 dotenv 实现，只覆盖本项目需要的子集：
     不做变量展开、不处理引号包裹的多行值。
     """
-    target = Path(path)
-    if not target.exists():
+    target = Path(path) if path else _default_env_path()
+    if target is None or not target.exists():
         return {}
     values: dict[str, str] = {}
     for line in target.read_text(encoding="utf-8").splitlines():
@@ -74,7 +90,7 @@ def _env_file_values(path: str = ".env") -> dict[str, str]:
 
 
 def load_settings(
-    env: Mapping[str, str] | None = None, *, env_file: str | None = ".env"
+    env: Mapping[str, str] | None = None, *, env_file: str | None = None
 ) -> Settings:
     """从环境变量装配配置。
 
@@ -85,8 +101,7 @@ def load_settings(
         source: Mapping[str, str] = env
     else:
         merged: dict[str, str] = {}
-        if env_file:
-            merged.update(_env_file_values(env_file))
+        merged.update(_env_file_values(env_file))
         merged.update(os.environ)  # 进程环境变量优先于文件
         source = merged
 

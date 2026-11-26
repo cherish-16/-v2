@@ -49,13 +49,14 @@ def run_daily(
     sources: SourceBundle,
     publishers: PublisherBundle,
     now: datetime | None = None,
+    force: bool = False,
 ) -> RunSummary:
     started_at = now or datetime.now(UTC)
     if started_at.tzinfo is None:
         raise ValueError("now must be timezone-aware")
 
     existing = repo.find_latest_run(team_id, report_date)
-    if existing is not None and existing.status in ("success", "partial"):
+    if not force and existing is not None and existing.status in ("success", "partial"):
         logger.info("duplicate run for %s on %s ignored", team_id, report_date)
         return RunSummary(
             team_id=team_id,
